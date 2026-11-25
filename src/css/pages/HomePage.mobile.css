@@ -1,0 +1,71 @@
+@media (max-width: 380px) {
+  .home-page, .page-wrap {
+    width: calc(100% - 24px);
+  }
+  .home-hero {
+    gap: 18px;
+    padding-top: 28px;
+  }
+  .hero-copy h1 {
+    font-size: clamp(38px, 12vw, 44px);
+    letter-spacing: -1.8px;
+  }
+  .hero-art {
+    min-height: 0;
+    margin-inline: 0;
+    padding: 12px;
+    border-radius: 22px;
+  }
+  .hero-image-frame, .hero-image-wash {
+    inset: 0;
+    border-radius: inherit;
+  }
+  .hero-art-empty {
+    inset: 12px;
+    border-radius: 16px;
+  }
+  .floating-note {
+    display: none;
+  }
+  .hero-art-topline {
+    inset: 25px 22px auto;
+  }
+  .hero-art-caption {
+    right: 22px;
+    bottom: 22px;
+    left: 22px;
+  }
+  .hero-art-caption h2 {
+    font-size: 22px;
+  }
+  .home-level-grid {
+    grid-template-columns: 1fr;
+  }
+  .home-level-grid .level-card:nth-child(3) {
+    display: block;
+  }
+  .level-card-compact .level-image-button {
+    height: 175px;
+  }
+  .level-heading-line {
+    flex-direction: row;
+    align-items: start;
+  }
+  .level-heading-line h3 {
+    font-size: 18px;
+  }
+  .level-heading-line p {
+    display: block;
+  }
+  .level-details-row .level-stat:last-child {
+    display: inline-flex;
+  }
+  .section-title-row {
+    gap: 8px;
+  }
+  .section-title-row .text-action {
+    flex: 0 0 auto;
+    padding: 4px;
+    font-size: 10px;
+  }
+}

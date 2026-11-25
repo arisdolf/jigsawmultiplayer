@@ -1,0 +1,37 @@
+.profile-studio-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid #dce5ed;
+  border-radius: 12px;
+  color: var(--blue-deep);
+  background: var(--paper);
+  font-size: 11px;
+  font-weight: 700;
+}
+.profile-signout {
+  min-height: 44px;
+}
+@media (max-width: 380px) {
+  .profile-heading {
+    align-items: start;
+    gap: 11px;
+  }
+  .profile-heading h1 {
+    font-size: 30px;
+    letter-spacing: -1px;
+    overflow-wrap: anywhere;
+  }
+  .profile-card {
+    padding: 15px;
+  }
+  .profile-studio-button {
+    padding-inline: 9px;
+    font-size: 10px;
+  }
+  .profile-stat-row {
+    grid-template-columns: 1fr auto;
+  }
+}

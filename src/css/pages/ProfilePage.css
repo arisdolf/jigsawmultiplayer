@@ -1,0 +1,215 @@
+.profile-heading h1 {
+  margin: 0;
+  color: var(--blue-deep);
+  font: 500 clamp(42px,5.2vw,66px)/1.02 var(--serif);
+  letter-spacing: -2.5px;
+}
+.profile-card h2 {
+  margin: 0;
+  color: var(--blue-deep);
+  font: 500 29px/1.1 var(--serif);
+  letter-spacing: -.5px;
+}
+.profile-heading h1 {
+  font-size: 48px;
+  letter-spacing: -1.7px;
+}
+.profile-heading {
+  display: flex;
+  align-items: center;
+  gap: 17px;
+  padding: 42px 0 26px;
+}
+.profile-avatar-large {
+  position: relative;
+}
+.profile-avatar-large > span:last-child {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  border: 2px solid var(--blue-mist);
+  border-radius: 9px;
+  color: #ba8574;
+  background: white;
+}
+.profile-heading h1 {
+  font-size: 42px;
+}
+.profile-heading p:last-child {
+  margin: 7px 0 0;
+  color: #8494a2;
+  font-size: 10px;
+}
+.profile-layout {
+  display: grid;
+  grid-template-columns: .8fr 1.2fr;
+  gap: 16px;
+  padding-bottom: 45px;
+}
+.profile-card {
+  padding: 23px;
+  border: 1px solid #e0e7ed;
+  border-radius: 18px;
+  background: rgba(250,252,255,.84);
+}
+.profile-card .section-eyebrow {
+  margin-bottom: 7px;
+}
+.profile-card h2 {
+  font-size: 24px;
+}
+.profile-signout {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 18px;
+  padding: 7px 0;
+  border: 0;
+  color: #a66e6c;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.profile-records .section-title-row {
+  align-items: center;
+}
+.profile-win-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #bf8879;
+  font-size: 9px;
+}
+.profile-stat-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 11px;
+  padding: 14px 0;
+  margin: 14px 0 4px;
+  border-block: 1px solid #edf0f2;
+  color: #8293a0;
+  font-size: 9px;
+}
+.profile-stat-row span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.profile-stat-row strong {
+  color: #55728a;
+  font: 500 15px var(--serif);
+}
+.profile-completion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 330px;
+  overflow-y: auto;
+  padding: 0;
+  margin: 14px 0 0;
+  list-style: none;
+}
+.profile-completion-list li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px;
+  border: 1px solid #edf1f3;
+  border-radius: 12px;
+}
+.profile-completion-image {
+  display: grid;
+  width: 42px;
+  height: 38px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 9px;
+  color: #99a9b3;
+  background: #edf2f5;
+}
+.profile-completion-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.profile-completion-list li > span:nth-child(2) {
+  min-width: 0;
+  flex: 1;
+}
+.profile-completion-list strong {
+  display: block;
+}
+.profile-completion-list small {
+  display: block;
+}
+.profile-completion-list strong {
+  color: #5f788c;
+  font-size: 9px;
+}
+.profile-completion-list small {
+  margin-top: 3px;
+  color: #99a5ad;
+  font-size: 8px;
+}
+.profile-completion-list li > svg {
+  color: #c18e7e;
+}
+.profile-empty {
+  display: flex;
+  min-height: 120px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: #95a2ab;
+  font-size: 9px;
+  text-align: center;
+}
+.profile-achievements {
+  padding: 10px 0 1px;
+}
+.profile-achievements p {
+  margin: 0 0 7px;
+  color: #8b998f;
+  font-size: 8px;
+  font-weight: 750;
+}
+.profile-achievements > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.profile-achievements span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px solid #eee8d9;
+  border-radius: 9px;
+  color: #92794e;
+  background: #f8f5ec;
+  font-size: 8px;
+  font-weight: 700;
+}
+.profile-achievements svg {
+  color: #be8c64;
+}
+@media (max-width: 760px) {
+  .profile-heading {
+    padding: 29px 0 20px;
+  }
+  .profile-heading h1 {
+    font-size: 35px;
+  }
+  .profile-layout {
+    grid-template-columns: 1fr;
+  }
+  .profile-card {
+    padding: 18px;
+  }
+}

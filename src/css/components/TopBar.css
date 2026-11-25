@@ -1,0 +1,252 @@
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(250,252,255,.92);
+  border-bottom: 1px solid rgba(41,76,112,.09);
+  backdrop-filter: blur(16px);
+}
+.topbar-main {
+  width: min(1320px, calc(100% - 64px));
+  min-height: 72px;
+  margin: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 30px;
+}
+.topbar-left {
+  display: flex;
+  align-items: center;
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+}
+.desktop-nav {
+  display: flex;
+  align-items: center;
+}
+.sound-quick-controls {
+  display: flex;
+  align-items: center;
+}
+.account-menu {
+  display: flex;
+  align-items: center;
+}
+.brand {
+  display: flex;
+  align-items: center;
+}
+.nav-link {
+  display: flex;
+  align-items: center;
+}
+.mobile-nav-link {
+  display: flex;
+  align-items: center;
+}
+.topbar-left {
+  gap: 12px;
+}
+.brand {
+  gap: 10px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 7px 0;
+}
+.brand-mark {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  color: white;
+  background: linear-gradient(145deg,#678fb4,#416c94);
+  border-radius: 13px 13px 13px 5px;
+  box-shadow: 0 6px 15px rgba(41,76,112,.2);
+}
+.brand-word {
+  font: 600 22px var(--serif);
+  letter-spacing: -.8px;
+  color: var(--blue-deep);
+}
+.brand-word span {
+  color: var(--coral);
+}
+.desktop-nav {
+  gap: 5px;
+  margin-left: auto;
+}
+.nav-link {
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: #657a8d;
+  padding: 10px 13px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: .2s ease;
+}
+.nav-link:hover {
+  color: var(--blue-deep);
+  background: #edf3f8;
+}
+.nav-link.active {
+  color: var(--blue-deep);
+  background: #edf3f8;
+}
+.topbar-actions {
+  gap: 15px;
+}
+.sound-quick-controls {
+  gap: 4px;
+  padding: 4px;
+  background: #f1f5f8;
+  border-radius: 12px;
+}
+.sound-quick {
+  display: grid;
+  place-items: center;
+  width: 33px;
+  height: 33px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #788b9c;
+  cursor: pointer;
+  transition: .18s ease;
+}
+.sound-settings-button {
+  display: grid;
+  place-items: center;
+  width: 33px;
+  height: 33px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #788b9c;
+  cursor: pointer;
+  transition: .18s ease;
+}
+.sound-quick:hover {
+  color: var(--blue-deep);
+  background: #e3ebf2;
+}
+.sound-settings-button:hover {
+  color: var(--blue-deep);
+  background: #e3ebf2;
+}
+.sound-quick.is-on {
+  color: var(--blue);
+}
+.sound-settings-button {
+  width: 28px;
+  height: 28px;
+}
+.account-menu {
+  gap: 8px;
+  padding-left: 13px;
+  border-left: 1px solid var(--line);
+}
+.account-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.account-name {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 650;
+}
+.account-logout {
+  width: 30px;
+  height: 30px;
+}
+.mobile-nav {
+  display: none;
+}
+@media (max-width: 980px) {
+  .topbar-main {
+    width: calc(100% - 38px);
+  }
+}
+@media (max-width: 760px) {
+  .topbar {
+    position: relative;
+  }
+  .topbar-main {
+    min-height: 62px;
+    width: calc(100% - 28px);
+    gap: 8px;
+  }
+  .brand-word {
+    font-size: 20px;
+  }
+  .desktop-nav {
+    display: none;
+  }
+  .topbar-actions {
+    gap: 8px;
+  }
+  .sound-quick-controls {
+    gap: 0;
+  }
+  .sound-quick {
+    width: 30px;
+    height: 30px;
+  }
+  .sound-settings-button {
+    width: 30px;
+    height: 30px;
+  }
+  .account-menu {
+    padding-left: 7px;
+  }
+  .account-name {
+    display: none;
+  }
+  .mobile-nav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 80;
+    display: flex;
+    align-items: stretch;
+    justify-content: space-around;
+    min-height: calc(60px + env(safe-area-inset-bottom));
+    padding: 5px 8px calc(5px + env(safe-area-inset-bottom));
+    border-top: 1px solid #eef2f5;
+    background: rgba(250,252,255,.96);
+    backdrop-filter: blur(16px);
+  }
+  .mobile-nav-link {
+    min-width: 0;
+    min-height: 44px;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    border: 0;
+    border-radius: 10px;
+    color: #8b9ba8;
+    background: transparent;
+    font-size: 10px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .mobile-nav-link.active {
+    color: var(--blue);
+    background: #f1f5f8;
+  }
+}

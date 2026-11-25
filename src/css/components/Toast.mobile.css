@@ -1,0 +1,13 @@
+@media (max-width: 760px) {
+  .toast {
+    right: 10px;
+    bottom: calc(72px + env(safe-area-inset-bottom) + 8px);
+    left: 10px;
+    max-width: none;
+    justify-content: space-between;
+    font-size: 12px;
+  }
+  .app-shell.is-game .toast {
+    bottom: calc(64px + env(safe-area-inset-bottom));
+  }
+}

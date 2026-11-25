@@ -1,0 +1,133 @@
+.join-page-card h1 {
+  margin: 0;
+  color: var(--blue-deep);
+  font: 500 clamp(42px,5.2vw,66px)/1.02 var(--serif);
+  letter-spacing: -2.5px;
+}
+.join-page {
+  position: relative;
+  display: grid;
+  min-height: calc(100vh - 140px);
+  place-items: center;
+  overflow: hidden;
+}
+.join-page-card {
+  position: relative;
+  z-index: 1;
+  width: min(440px,100%);
+  padding: 32px;
+  border: 1px solid white;
+  border-radius: 23px;
+  background: rgba(250,252,255,.88);
+  box-shadow: 0 20px 50px rgba(41,76,112,.1);
+  text-align: center;
+}
+.join-page-mark {
+  display: grid;
+  width: 49px;
+  height: 49px;
+  place-items: center;
+  margin: 0 auto 17px;
+  border-radius: 17px;
+  color: var(--blue);
+  background: #e8f0f6;
+}
+.join-page-card .section-eyebrow {
+  margin-bottom: 8px;
+}
+.join-page-card h1 {
+  font-size: 43px;
+  letter-spacing: -1px;
+}
+.join-page-card > p:not(.section-eyebrow) {
+  max-width: 320px;
+  margin: 11px auto 20px;
+  color: #8394a2;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.join-page-form {
+  flex-direction: column;
+}
+.join-page-form input {
+  width: 100%;
+  height: 51px;
+  letter-spacing: 5px;
+}
+.join-page-form button {
+  width: 100%;
+}
+.join-page-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0;
+  color: #a4afb8;
+  font-size: 9px;
+}
+.join-page-divider::before {
+  height: 1px;
+  flex: 1;
+  content: "";
+  background: #e4eaee;
+}
+.join-page-divider::after {
+  height: 1px;
+  flex: 1;
+  content: "";
+  background: #e4eaee;
+}
+.join-page-card > small {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  margin-top: 16px;
+  color: #97a4ae;
+  font-size: 8px;
+}
+.join-page-decoration {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.join-page-decoration span {
+  position: absolute;
+  color: #cf9b8b;
+  font-size: 22px;
+}
+.join-page-decoration span:nth-child(1) {
+  top: 19%;
+  left: 19%;
+}
+.join-page-decoration span:nth-child(2) {
+  right: 18%;
+  top: 28%;
+  color: #90a9bb;
+  font-size: 31px;
+}
+.join-page-decoration span:nth-child(3) {
+  right: 23%;
+  bottom: 17%;
+  color: #a5b69e;
+}
+@media (max-width: 760px) {
+  .join-page {
+    min-height: calc(100vh - 130px);
+  }
+  .join-page-card {
+    padding: 24px 18px;
+  }
+  .join-page-card h1 {
+    font-size: 37px;
+  }
+  .join-page-decoration span:nth-child(1) {
+    left: 4%;
+  }
+  .join-page-decoration span:nth-child(2) {
+    right: 3%;
+  }
+  .join-page-decoration span:nth-child(3) {
+    right: 7%;
+  }
+}

@@ -1,0 +1,42 @@
+.toast {
+  position: fixed;
+  right: 20px;
+  bottom: 22px;
+  z-index: 90;
+  display: flex;
+  max-width: min(400px,calc(100% - 40px));
+  align-items: center;
+  gap: 10px;
+  padding: 12px 13px;
+  border: 1px solid #dbe5ec;
+  border-radius: 14px;
+  color: #547087;
+  background: white;
+  box-shadow: 0 12px 30px rgba(34,61,80,.16);
+  font-size: 10px;
+  animation: rise-in .2s ease;
+}
+.toast-success > svg {
+  color: #6d987c;
+}
+.toast-error > svg {
+  color: #c36868;
+}
+.toast button {
+  display: grid;
+  width: 23px;
+  height: 23px;
+  place-items: center;
+  margin-left: 5px;
+  border: 0;
+  border-radius: 7px;
+  color: #91a0ac;
+  background: transparent;
+  cursor: pointer;
+}
+@media (max-width: 760px) {
+  .toast {
+    right: 10px;
+    bottom: 10px;
+  }
+}

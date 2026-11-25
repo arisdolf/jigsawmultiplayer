@@ -1,0 +1,39 @@
+@media (max-width: 380px) {
+  .admin-header {
+    align-items: start;
+    gap: 8px;
+  }
+  .admin-header h1 {
+    font-size: 33px;
+    letter-spacing: -1.2px;
+  }
+  .admin-header > svg {
+    width: 24px;
+    flex: 0 0 auto;
+  }
+  .admin-count strong {
+    font-size: 24px;
+  }
+  .admin-toolbar {
+    align-items: start;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .admin-field-grid {
+    grid-template-columns: 1fr;
+  }
+  .admin-toggles {
+    grid-template-columns: 1fr;
+  }
+  .admin-toggles label {
+    min-height: 40px;
+    font-size: 10px;
+  }
+  .admin-save-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .admin-save-row .button {
+    width: 100%;
+  }
+}

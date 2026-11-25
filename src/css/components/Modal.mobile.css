@@ -1,0 +1,56 @@
+@media (max-width: 760px) {
+  .app-modal {
+    position: fixed;
+    inset-block: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-bottom));
+    inset-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right));
+    width: auto;
+    max-width: 460px;
+    max-height: min(780px, calc(100dvh - max(24px, env(safe-area-inset-top) + 12px) - max(24px, env(safe-area-inset-bottom) + 12px)));
+    margin: auto;
+    border-radius: 18px;
+  }
+  .modal-content {
+    max-height: min(778px, calc(100dvh - max(24px, env(safe-area-inset-top) + 12px) - max(24px, env(safe-area-inset-bottom) + 12px) - 2px));
+    padding: 18px;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .modal-heading {
+    gap: 10px;
+  }
+  .modal-heading h2 {
+    font-size: 23px;
+  }
+  .modal-heading p {
+    font-size: 12px;
+  }
+  .auth-tabs button {
+    min-height: 44px;
+    font-size: 10px;
+  }
+  .auth-form {
+    gap: 14px;
+  }
+  .auth-form label, .admin-field-grid label, .admin-full-field {
+    font-size: 12px;
+  }
+  .auth-form input, .admin-field-grid input, .admin-field-grid select, .admin-full-field input, .admin-full-field textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  .toggle-switch {
+    width: 48px;
+    height: 28px;
+  }
+  .toggle-switch i {
+    width: 20px;
+    height: 20px;
+  }
+  .toggle-switch.active i {
+    left: 25px;
+  }
+  .range-line {
+    min-height: 44px;
+    font-size: 11px;
+  }
+}

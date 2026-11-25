@@ -1,0 +1,56 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.uid == userId
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0
+        && request.resource.data.displayName.size() <= 48;
+      allow update: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['displayName', 'email', 'photoURL', 'lastSeenAt', 'createdAt', 'audioPreferences']);
+      allow delete: if false;
+
+      match /completions/{completionId} {
+        allow read: if signedIn() && request.auth.uid == userId;
+        allow write: if false;
+      }
+    }
+
+    match /levels/{levelId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin()
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 80
+        && request.resource.data.pieceCount is int
+        && request.resource.data.pieceCount > 0
+        && request.resource.data.pieceCount <= 5000
+        && request.resource.data.difficulty is string
+        && request.resource.data.imageURL is string;
+    }
+
+    match /completions/{completionId} {
+      allow read: if signedIn() && request.auth.uid in resource.data.participants;
+      allow write: if false;
+    }
+
+    match /achievements/{achievementId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}

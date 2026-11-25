@@ -1,0 +1,40 @@
+@media (max-width: 380px) {
+  .levels-header {
+    gap: 12px;
+  }
+  .levels-header h1 {
+    font-size: 34px;
+    letter-spacing: -1.5px;
+  }
+  .levels-total {
+    min-width: 65px;
+  }
+  .levels-total strong {
+    font-size: 26px;
+  }
+  .library-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .library-grid .level-image-button {
+    height: 185px;
+  }
+  .library-grid .level-heading-line {
+    flex-direction: row;
+  }
+  .library-grid .level-heading-line h3 {
+    font-size: 18px;
+  }
+  .library-grid .level-heading-line p {
+    min-height: 0;
+    font-size: 10px;
+  }
+  .library-grid .level-stat:last-child {
+    display: inline-flex;
+  }
+  .difficulty-filters button {
+    min-height: 40px;
+    padding-inline: 11px;
+    font-size: 10px;
+  }
+}

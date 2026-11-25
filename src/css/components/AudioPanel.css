@@ -1,0 +1,77 @@
+.audio-setting {
+  display: flex;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid #edf0f2;
+}
+.audio-setting-icon {
+  display: grid;
+  width: 37px;
+  height: 37px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 12px;
+  color: #6386a2;
+  background: #eaf1f6;
+}
+.audio-setting-main {
+  flex: 1;
+}
+.audio-setting-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #4f6a80;
+  font-size: 11px;
+}
+.audio-setting-main p {
+  margin: 5px 0 12px;
+  color: #8f9da7;
+  font-size: 9px;
+}
+.toggle-switch {
+  position: relative;
+  width: 37px;
+  height: 21px;
+  border: 0;
+  border-radius: 12px;
+  background: #d9e1e7;
+  cursor: pointer;
+  transition: .2s;
+}
+.toggle-switch i {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: white;
+  transition: .2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,.16);
+}
+.toggle-switch.active {
+  background: #6b91af;
+}
+.toggle-switch.active i {
+  left: 19px;
+}
+.range-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #8093a3;
+  font-size: 8px;
+}
+.range-line input {
+  width: 100%;
+  accent-color: var(--blue);
+}
+.audio-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 14px;
+  color: #a0abb3;
+  font-size: 8px;
+}

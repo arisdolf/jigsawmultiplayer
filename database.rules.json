@@ -1,0 +1,54 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "roomCodes": {
+      "$code": {
+        ".read": "auth != null",
+        ".write": "auth != null && ((!data.exists() && newData.isString() && newData.val().length == 20) || (data.exists() && !newData.exists() && root.child('rooms').child(data.val()).child('meta').child('hostId').val() == auth.uid))"
+      }
+    },
+    "rooms": {
+      "$roomId": {
+        "meta": {
+          ".read": "auth != null && (data.child('isPublic').val() == true || root.child('rooms').child($roomId).child('players').child(auth.uid).exists())",
+          ".write": "auth != null && ((!data.exists() && newData.child('hostId').val() == auth.uid) || data.child('hostId').val() == auth.uid)",
+          ".validate": "newData.hasChildren(['roomCode', 'hostId', 'levelId', 'status', 'isPublic', 'createdAt', 'updatedAt']) && newData.child('roomCode').isString() && newData.child('roomCode').val().matches(/^[A-Z2-9]{6}$/) && newData.child('hostId').isString() && newData.child('levelId').isString() && (newData.child('status').val() == 'waiting' || newData.child('status').val() == 'playing' || newData.child('status').val() == 'paused' || newData.child('status').val() == 'completed' || newData.child('status').val() == 'closed') && newData.child('isPublic').isBoolean() && newData.child('createdAt').isNumber() && newData.child('updatedAt').isNumber()"
+        },
+        "players": {
+          "$uid": {
+            ".read": "auth != null && (root.child('rooms').child($roomId).child('meta').child('isPublic').val() == true || root.child('rooms').child($roomId).child('players').child(auth.uid).exists())",
+            ".write": "auth != null && ((($uid == auth.uid) && data.exists()) || root.child('rooms').child($roomId).child('meta').child('hostId').val() == auth.uid)",
+            ".validate": "!newData.exists() || (newData.child('uid').val() == $uid && newData.child('displayName').isString() && newData.child('displayName').val().length > 0 && newData.child('displayName').val().length <= 48 && newData.child('joinedAt').isNumber() && (root.child('rooms').child($roomId).child('meta').child('isPublic').val() == true || $uid == root.child('rooms').child($roomId).child('meta').child('hostId').val() || newData.child('joinedWithCode').val() == root.child('rooms').child($roomId).child('meta').child('roomCode').val() || data.child('joinedWithCode').val() == root.child('rooms').child($roomId).child('meta').child('roomCode').val()))"
+          }
+        },
+        "game": {
+          ".read": "auth != null && root.child('rooms').child($roomId).child('players').child(auth.uid).exists()",
+          ".write": "auth != null && root.child('rooms').child($roomId).child('meta').child('hostId').val() == auth.uid",
+          ".validate": "newData.hasChildren(['progress']) && newData.child('progress').isNumber() && newData.child('progress').val() >= 0"
+        },
+        "pieces": {
+          "$pieceId": {
+            ".read": "auth != null && root.child('rooms').child($roomId).child('players').child(auth.uid).exists()",
+            ".write": "auth != null && root.child('rooms').child($roomId).child('players').child(auth.uid).exists() && (data.child('placed').val() != true || root.child('rooms').child($roomId).child('meta').child('hostId').val() == auth.uid) && ((!data.exists() && root.child('rooms').child($roomId).child('meta').child('hostId').val() == auth.uid) || data.child('movingBy').val() == auth.uid || !data.child('movingBy').exists() || data.child('lockUntil').val() < now || newData.child('movingBy').val() == auth.uid)",
+            ".validate": "newData.hasChildren(['x', 'y', 'placed', 'rotation', 'movingBy', 'lockUntil', 'placedBy', 'updatedAt']) && newData.child('x').isNumber() && newData.child('y').isNumber() && newData.child('placed').isBoolean() && newData.child('rotation').isNumber() && (newData.child('rotation').val() == 0 || newData.child('rotation').val() == 90 || newData.child('rotation').val() == 180 || newData.child('rotation').val() == 270) && newData.child('lockUntil').isNumber() && newData.child('updatedAt').isNumber() && (newData.child('placed').val() == true ? (newData.child('placedBy').val() == auth.uid && newData.child('rotation').val() == 0 && newData.child('x').val() >= root.child('rooms').child($roomId).child('pieceTargets').child($pieceId).child('x').val() - 2 && newData.child('x').val() <= root.child('rooms').child($roomId).child('pieceTargets').child($pieceId).child('x').val() + 2 && newData.child('y').val() >= root.child('rooms').child($roomId).child('pieceTargets').child($pieceId).child('y').val() - 2 && newData.child('y').val() <= root.child('rooms').child($roomId).child('pieceTargets').child($pieceId).child('y').val() + 2) : newData.child('placedBy').val() == null)"
+          }
+        },
+        "pieceTargets": {
+          "$pieceId": {
+            ".read": "auth != null && root.child('rooms').child($roomId).child('players').child(auth.uid).exists()",
+            ".write": "auth != null && root.child('rooms').child($roomId).child('meta').child('hostId').val() == auth.uid && (!data.exists() || !newData.exists() || (newData.child('x').val() == data.child('x').val() && newData.child('y').val() == data.child('y').val()))",
+            ".validate": "newData.hasChildren(['x', 'y']) && newData.child('x').isNumber() && newData.child('y').isNumber()"
+          }
+        },
+        "chat": {
+          "$messageId": {
+            ".read": "auth != null && root.child('rooms').child($roomId).child('players').child(auth.uid).exists()",
+            ".write": "auth != null && root.child('rooms').child($roomId).child('players').child(auth.uid).exists() && !data.exists() && newData.child('uid').val() == auth.uid",
+            ".validate": "newData.hasChildren(['uid', 'displayName', 'text', 'createdAt']) && newData.child('displayName').isString() && newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 240 && newData.child('createdAt').isNumber()"
+          }
+        }
+      }
+    }
+  }
+}
