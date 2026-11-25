@@ -1,23 +1,11 @@
-const STYLE_NAMES = [
-  'rounded',
-  'wide-rounded',
-  'narrow-rounded',
-  'asymmetric',
-  'irregular',
-  'necked',
-]
-
-const SHAPES = [
-  { start: 0.3, end: 0.7, center: 0.5, depth: 0.22, shoulder: 0.055 },
-  { start: 0.16, end: 0.84, center: 0.5, depth: 0.24, shoulder: 0.11 },
-  { start: 0.39, end: 0.61, center: 0.5, depth: 0.19, shoulder: 0.035 },
-  { start: 0.23, end: 0.72, center: 0.44, depth: 0.21, shoulder: 0.06 },
-  { start: 0.26, end: 0.77, center: 0.56, depth: 0.29, shoulder: 0.1 },
-  { start: 0.31, end: 0.69, center: 0.5, depth: 0.27, shoulder: 0.035 },
-]
+// One knob style only: a round head on a narrow neck, centered on the edge,
+// exactly like the reference sheet. Variety comes from every edge randomly
+// being a tab or a blank, so you get corner, edge, 1/2/3/4-tab pieces, etc.
+const SHAPE = { center: 0.5, neck: 0.07, head: 0.13, rise: 0.03, flare: 0.035 }
 
 const MAX_PIECES = 5000
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
+const round2 = (value) => Math.round(value * 100) / 100
 
 function hash32(value) {
   let hash = 2166136261
@@ -41,17 +29,42 @@ function getGrid(pieceCount, imageAspect = 1.5) {
     const distance = Math.abs(Math.log(columns / rows / targetAspect))
     if (distance < best.distance) best = { rows, columns, distance }
   }
-
   return { rows: best.rows, columns: best.columns }
 }
 
-function getEdgeStyle(axis, x, y) {
-  const key = `${axis}:${x}:${y}`
-  const hash = hash32(key)
-  return {
-    style: hash % SHAPES.length,
-    positiveSideHasTab: (hash & 1) === 0,
-  }
+// Deterministic per level (seed = level id) so every player in the room
+// gets identical piece shapes, but each level has its own random layout.
+function getEdgeStyle(axis, x, y, seed = '') {
+  const hash = hash32(`${seed}|${axis}:${x}:${y}`)
+  return { style: 0, positiveSideHasTab: ((hash >>> 16) & 1) === 0 }
+}
+
+// Classic knob, drawn along one edge from u=0 to u=1.
+// v is how far the knob sticks out (as a fraction of the edge length).
+function knobProfile({ center: c, neck: n, head: r, rise: h, flare: f } = SHAPE) {
+  const hc = h + r * 0.9 // height of the head's center
+  const anchors = [
+    [0, 0],
+    [c - n - f, 0],
+    [c - n, h],
+    [c - r, hc],
+    [c, hc + r],
+    [c + r, hc],
+    [c + n, h],
+    [c + n + f, 0],
+    [1, 0],
+  ]
+  const ctrls = [
+    null,
+    [[c - n - f * 0.3, 0], [c - n, h * 0.35]],
+    [[c - n, h + (hc - h) * 0.6], [c - r, hc - r * 0.45]],
+    [[c - r, hc + r * 0.55], [c - r * 0.55, hc + r]],
+    [[c + r * 0.55, hc + r], [c + r, hc + r * 0.55]],
+    [[c + r, hc - r * 0.45], [c + n, h + (hc - h) * 0.6]],
+    [[c + n, h * 0.35], [c + n + f * 0.3, 0]],
+    null,
+  ]
+  return { anchors, ctrls }
 }
 
 function edgePath(side, isTab, styleIndex, width, height, flat = false) {
@@ -62,72 +75,47 @@ function edgePath(side, isTab, styleIndex, width, height, flat = false) {
     return 'L 0 0'
   }
 
-  const shape = SHAPES[styleIndex]
   const vertical = side === 'right' || side === 'left'
   const reverse = side === 'bottom' || side === 'left'
   const length = vertical ? height : width
-  const normal = {
-    top: [0, -1],
-    right: [1, 0],
-    bottom: [0, 1],
-    left: [-1, 0],
-  }[side]
-  const direction = isTab ? 1 : -1
-  const depth = length * shape.depth * direction
-  const start = shape.start
-  const end = shape.end
-  const middle = shape.center
-  const shoulder = shape.shoulder
-  const points = [
-    [start, 0],
-    [start + shoulder, 0],
-    [middle - shoulder * 1.2, depth * 0.48],
-    [middle, depth],
-    [middle + shoulder * 1.2, depth],
-    [end - shoulder, depth * 0.48],
-    [end, 0],
-  ]
+  const normal = { top: [0, -1], right: [1, 0], bottom: [0, 1], left: [-1, 0] }[side]
+  const sign = isTab ? 1 : -1
+    const { anchors, ctrls } = knobProfile(SHAPE)
 
-  const point = ([u, offset]) => {
+  const toXY = ([u, v]) => {
     const along = (reverse ? 1 - u : u) * length
-    const outward = offset * (vertical ? width : height) / length
-    if (vertical) {
-      return [
-        (side === 'right' ? width : 0) + normal[0] * outward,
-        along + normal[1] * outward,
-      ]
-    }
-    return [
-      along + normal[0] * outward,
-      (side === 'bottom' ? height : 0) + normal[1] * outward,
-    ]
+    const out = v * length * sign
+    const x = vertical ? (side === 'right' ? width : 0) + normal[0] * out : along + normal[0] * out
+    const y = vertical ? along + normal[1] * out : (side === 'bottom' ? height : 0) + normal[1] * out
+    return [round2(x), round2(y)]
   }
 
-  const ordered = reverse ? [...points].reverse() : points
-  const coords = ordered.map(point)
-  const [sx, sy] = coords[0]
-  const [c1x, c1y] = coords[1]
-  const [c2x, c2y] = coords[2]
-  const [mx, my] = coords[3]
-  const [d1x, d1y] = coords[4]
-  const [d2x, d2y] = coords[5]
-  const [ex, ey] = coords[6]
+  const points = anchors.map(toXY)
+  const curves = ctrls.map((pair) => pair && [toXY(pair[0]), toXY(pair[1])])
+  const segment = (pair, to) => (pair
+    ? `C ${pair[0][0]} ${pair[0][1]}, ${pair[1][0]} ${pair[1][1]}, ${to[0]} ${to[1]}`
+    : `L ${to[0]} ${to[1]}`)
 
-  return `L ${sx} ${sy} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${mx} ${my} C ${d1x} ${d1y}, ${d2x} ${d2y}, ${ex} ${ey}`
+    const commands = []
+  for (let i = 0; i < curves.length; i += 1) commands.push(segment(curves[i], points[i + 1]))
+  return commands.join(' ')
 }
 
 export function getPiecePath(piece, grid) {
   const { width, height, row, column } = piece
   const index = row * grid.columns + column
-  const top = row === 0 ? null : getEdgeStyle('h', column, row)
-  const bottom = index + grid.columns >= grid.count ? null : getEdgeStyle('h', column, row + 1)
-  const left = column === 0 ? null : getEdgeStyle('v', column, row)
-  const right = column === grid.columns - 1 || index + 1 >= grid.count ? null : getEdgeStyle('v', column + 1, row)
+    const seed = grid.seed || ''
+  const top = row === 0 ? null : getEdgeStyle('h', column, row, seed)
+  const bottom = index + grid.columns >= grid.count ? null : getEdgeStyle('h', column, row + 1, seed)
+  const left = column === 0 ? null : getEdgeStyle('v', column, row, seed)
+  const right = column === grid.columns - 1 || index + 1 >= grid.count ? null : getEdgeStyle('v', column + 1, row, seed)
 
   const topTab = top?.positiveSideHasTab ?? false
   const bottomTab = bottom ? !bottom.positiveSideHasTab : false
   const leftTab = left?.positiveSideHasTab ?? false
   const rightTab = right ? !right.positiveSideHasTab : false
+
+  
 
   return [
     'M 0 0',
@@ -143,6 +131,7 @@ export async function generatePuzzlePieces({
   pieceCount,
   imageAspect = 1.5,
   boardWidth = 1800,
+  seed = '',
   onProgress = () => {},
   signal,
 }) {
@@ -160,23 +149,30 @@ export async function generatePuzzlePieces({
     width: columns * cellSize,
     height: rows * cellSize,
     count,
+    seed: String(seed),
     trayGap: Math.max(80, cellSize * 2.5),
   }
   const trayColumns = Math.max(1, Math.ceil(Math.sqrt(count * clamp(imageAspect, 0.55, 2.4))))
   const pieces = new Array(count)
   const batchSize = count > 1000 ? 180 : 500
 
+  // Fisher–Yates shuffle: every piece gets a random loose-pile slot
+  const slots = Array.from({ length: count }, (_, index) => index)
+  for (let index = count - 1; index > 0; index -= 1) {
+    const swap = Math.floor(Math.random() * (index + 1))
+    ;[slots[index], slots[swap]] = [slots[swap], slots[index]]
+  }
+
   for (let index = 0; index < count; index += 1) {
     if (signal?.aborted) throw new DOMException('Puzzle generation cancelled.', 'AbortError')
 
     const row = Math.floor(index / columns)
     const column = index % columns
-    const trayRow = Math.floor(index / trayColumns)
-    const trayColumn = index % trayColumns
-    const seed = hash32(`${row}:${column}`)
-    const jitter = (seed % 17) - 8
-    const x = grid.width + grid.trayGap + trayColumn * cellSize + jitter
-    const y = trayRow * cellSize + ((seed >>> 8) % 17) - 8
+    const slot = slots[index]
+    const trayRow = Math.floor(slot / trayColumns)
+    const trayColumn = slot % trayColumns
+    const x = grid.width + grid.trayGap + trayColumn * cellSize + (Math.random() * 20 - 10)
+    const y = trayRow * cellSize + (Math.random() * 20 - 10)
 
     pieces[index] = {
       id: `${row}-${column}`,
@@ -192,8 +188,8 @@ export async function generatePuzzlePieces({
       rotation: 0,
       movingBy: null,
       lockUntil: 0,
-      style: seed % STYLE_NAMES.length,
-      styleName: STYLE_NAMES[seed % STYLE_NAMES.length],
+      style: 0,
+      stackOrder: slot, // random stacking + random order in the piece tray
     }
 
     if ((index + 1) % batchSize === 0 && index + 1 < count) {

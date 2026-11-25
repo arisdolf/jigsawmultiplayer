@@ -69,6 +69,7 @@ export default function PuzzleBoard({
   const pinchRef = useRef(null)
   const lastTapRef = useRef(null)
   const fitZoomRef = useRef(1)
+  const hoverBlockRef = useRef(null)
   const pendingPointerRef = useRef(null)
   const selectedPieceRef = useRef(null)
   const trayPagePiecesRef = useRef([])
@@ -117,12 +118,13 @@ export default function PuzzleBoard({
               if (workerRef.current === worker) workerRef.current = null
               reject(error)
             }
-            worker.postMessage({ pieceCount: level.pieceCount, imageAspect })
+            worker.postMessage({ pieceCount: level.pieceCount, imageAspect, seed: level.id })
           })
         } else {
           generated = await generatePuzzlePieces({
             pieceCount: level.pieceCount,
             imageAspect,
+            seed: level.id,
             onProgress: (progress) => !cancelled && setGeneration((current) => ({ ...current, progress })),
           })
         }
@@ -146,7 +148,7 @@ export default function PuzzleBoard({
             targetX: piece.targetX,
             targetY: piece.targetY,
             pathData,
-            stackOrder: piece.row * grid.columns + piece.column,
+
           }
           pieceMap.set(piece.id, fullPiece)
         })
@@ -475,32 +477,133 @@ export default function PuzzleBoard({
       })
   }
 
+  async function beginPiece(piece, pointerId, point, fromTray, pressing) {
+    if (!pressing) return // pieces are only picked up by a real click/tap
+    const world = screenToWorld(point, viewRef.current)
+    const pending = { pointerId, point, piece, released: false, fromTray, pressing }
+    pendingPointerRef.current = pending
+    const locked = await roomControl.acquirePiece(piece)
+    if (!locked) {
+      hoverBlockRef.current = piece.id
+      if (pendingPointerRef.current === pending) pendingPointerRef.current = null
+      return
+    }
+    if (pending.released || pendingPointerRef.current !== pending) {
+      await roomControl.release(piece.id, { x: piece.x, y: piece.y, placed: false, rotation: piece.rotation || 0 })
+      return
+    }
+    pendingPointerRef.current = null
+    if (fromTray) {
+      piece.x = world.x - piece.width / 2
+      piece.y = world.y - piece.height / 2
+      indexRef.current.update(piece)
+      trayDrawRef.current?.()
+    }
+    piece.stackOrder = Date.now()
+    dragRef.current = {
+      kind: 'piece',
+      carry: true,
+      piece,
+      pointerId,
+      pressing: pending.pressing,
+      downPoint: pending.pressing ? point : null,
+      offsetX: world.x - piece.x,
+      offsetY: world.y - piece.y,
+      anchor: null,
+      changed: false,
+    }
+    selectedPieceRef.current = piece
+    onSound('pickup')
+    drawRef.current?.()
+  }
+
+  function moveHeld(drag, x, y) {
+    const piece = drag.piece
+    piece.x = x
+    piece.y = y
+    drag.changed = true
+    indexRef.current.update(piece)
+    drawRef.current?.()
+    const now = Date.now()
+    if (now - lastWriteRef.current.at > 120 && !lastWriteRef.current.pending) {
+      lastWriteRef.current.at = now
+      lastWriteRef.current.pending = roomControl.move(piece.id, piece.x, piece.y, user)
+        .catch(() => { })
+        .finally(() => { lastWriteRef.current.pending = null })
+      onSound('move')
+    }
+  }
+
+  async function dropPiece() {
+    const drag = dragRef.current
+    if (!drag || drag.kind !== 'piece') return
+    const piece = drag.piece
+    dragRef.current = null
+    const grid = gridRef.current
+    const withinBoard = piece.x >= 0 && piece.y >= 0 && piece.x <= grid.width && piece.y <= grid.height
+    const correct = (piece.rotation || 0) % 360 === 0 && isCorrectPlacement(piece, piece.x, piece.y, viewRef.current.scale)
+    if (correct) {
+      piece.x = piece.targetX
+      piece.y = piece.targetY
+      piece.placed = true
+      piece.placedBy = user.uid
+      onSound('correct')
+    } else if (withinBoard) {
+      onSound('incorrect')
+    }
+    hoverBlockRef.current = piece.id // don't instantly re-grab what we just dropped
+    selectedPieceRef.current = null
+    indexRef.current.update(piece)
+    drawRef.current?.()
+    const queued = lastWriteRef.current.pending
+    if (queued) await queued
+    await roomControl.release(piece.id, { x: piece.x, y: piece.y, placed: correct, rotation: piece.rotation || 0 })
+    drawRef.current?.()
+    trayDrawRef.current?.()
+  }
+
   async function handlePointerDown(event) {
     if (!generation.ready || disabled) return
     event.currentTarget.setPointerCapture(event.pointerId)
     const point = pointFromEvent(event)
     const fromTray = event.currentTarget === trayCanvasRef.current
-    if (event.pointerType === 'touch') {
-      const pointers = pointerPointsRef.current
-      pointers.set(event.pointerId, point)
-      if (pointers.size >= 2) {
-        if (dragRef.current?.kind === 'pan' && !pendingPointerRef.current) {
-          const pair = [...pointers.entries()].slice(-2)
-          const first = pair[0][1]
-          const second = pair[1][1]
-          const center = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 }
-          pinchRef.current = {
-            pointerIds: pair.map(([id]) => id),
-            startDistance: Math.max(1, Math.hypot(second.x - first.x, second.y - first.y)),
-            startScale: viewRef.current.scale,
-            worldAnchor: screenToWorld(center, viewRef.current),
-          }
-          dragRef.current = null
-          drawRef.current?.()
+    const pointers = pointerPointsRef.current
+    if (event.pointerType === 'touch') pointers.set(event.pointerId, point)
+
+    // Already holding a piece: a click/tap drops it, touch-drag moves it from anywhere
+    const held = dragRef.current
+    if (held?.kind === 'piece') {
+      event.preventDefault()
+      if (event.pointerType === 'touch') {
+        if (!held.anchor && !held.pressing) {
+          const world = screenToWorld(point, viewRef.current)
+          held.anchor = { pointerId: event.pointerId, worldX: world.x, worldY: world.y, pieceX: held.piece.x, pieceY: held.piece.y, moved: false }
         }
-        return
+      } else if (event.button === 0) {
+        await dropPiece()
       }
+      return
     }
+    if (pendingPointerRef.current) return
+
+    if (event.pointerType === 'touch' && pointers.size >= 2) {
+      if (dragRef.current?.kind === 'pan') {
+        const pair = [...pointers.entries()].slice(-2)
+        const first = pair[0][1]
+        const second = pair[1][1]
+        const center = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 }
+        pinchRef.current = {
+          pointerIds: pair.map(([id]) => id),
+          startDistance: Math.max(1, Math.hypot(second.x - first.x, second.y - first.y)),
+          startScale: viewRef.current.scale,
+          worldAnchor: screenToWorld(center, viewRef.current),
+        }
+        dragRef.current = null
+        drawRef.current?.()
+      }
+      return
+    }
+
     let piece = null
     if (event.button === 0 && fromTray) {
       const rect = event.currentTarget.getBoundingClientRect()
@@ -519,46 +622,14 @@ export default function PuzzleBoard({
     }
     if (piece) {
       event.preventDefault()
-      const pending = { pointerId: event.pointerId, point, piece, released: false, fromTray }
-      pendingPointerRef.current = pending
-      const locked = await roomControl.acquirePiece(piece)
-      if (!locked) {
-        if (pendingPointerRef.current === pending) pendingPointerRef.current = null
-        return
-      }
-      if (pending.released || pendingPointerRef.current !== pending) {
-        await roomControl.release(piece.id, { x: piece.x, y: piece.y, placed: false, rotation: piece.rotation || 0 })
-        return
-      }
-      pendingPointerRef.current = null
-      const world = screenToWorld(point, viewRef.current)
-      if (fromTray) {
-        piece.x = world.x - piece.width / 2
-        piece.y = world.y - piece.height / 2
-        indexRef.current.update(piece)
-        trayDrawRef.current?.()
-      }
-      piece.stackOrder = Date.now()
-      dragRef.current = {
-        kind: 'piece',
-        piece,
-        pointerId: event.pointerId,
-        startX: world.x,
-        startY: world.y,
-        originalX: piece.x,
-        originalY: piece.y,
-        changed: false,
-      }
-      selectedPieceRef.current = piece
-      onSound('pickup')
-      drawRef.current?.()
+      await beginPiece(piece, event.pointerId, point, fromTray, true)
       return
     }
 
     dragRef.current = { kind: 'pan', pointerId: event.pointerId, startX: point.x, startY: point.y, panX: viewRef.current.panX, panY: viewRef.current.panY, moved: false }
   }
 
-  function handlePointerMove(event) {
+    function handlePointerMove(event) {
     if (disabled) return
     const pointers = pointerPointsRef.current
     if (event.pointerType === 'touch' && pointers.has(event.pointerId)) pointers.set(event.pointerId, pointFromEvent(event))
@@ -588,7 +659,30 @@ export default function PuzzleBoard({
       event.preventDefault()
       return
     }
+
     const drag = dragRef.current
+
+    // Carrying a piece (only exists after a click/tap picked one up)
+    if (drag?.kind === 'piece') {
+      const point = pointFromEvent(event)
+      const world = screenToWorld(point, viewRef.current)
+      if (event.pointerType === 'touch') {
+        const anchor = drag.anchor
+        if (anchor && anchor.pointerId === event.pointerId) {
+          if (!anchor.moved && Math.hypot(world.x - anchor.worldX, world.y - anchor.worldY) * viewRef.current.scale <= 6) return
+          anchor.moved = true
+          moveHeld(drag, anchor.pieceX + world.x - anchor.worldX, anchor.pieceY + world.y - anchor.worldY)
+          event.preventDefault()
+        } else if (drag.pointerId === event.pointerId && drag.pressing) {
+          moveHeld(drag, world.x - drag.offsetX, world.y - drag.offsetY)
+          event.preventDefault()
+        }
+        return
+      }
+      moveHeld(drag, world.x - drag.offsetX, world.y - drag.offsetY)
+      return
+    }
+
     if (!drag || drag.pointerId !== event.pointerId) return
     const point = pointFromEvent(event)
     if (drag.kind === 'pan') {
@@ -596,24 +690,6 @@ export default function PuzzleBoard({
       viewRef.current.panX = drag.panX + point.x - drag.startX
       viewRef.current.panY = drag.panY + point.y - drag.startY
       drawRef.current?.()
-      return
-    }
-
-    const world = screenToWorld(point, viewRef.current)
-    const piece = drag.piece
-    piece.x = drag.originalX + world.x - drag.startX
-    piece.y = drag.originalY + world.y - drag.startY
-    drag.changed = true
-    indexRef.current.update(piece)
-    drawRef.current?.()
-
-    const now = Date.now()
-    if (now - lastWriteRef.current.at > 120 && !lastWriteRef.current.pending) {
-      lastWriteRef.current.at = now
-      lastWriteRef.current.pending = roomControl.move(piece.id, piece.x, piece.y, user)
-        .catch(() => {})
-        .finally(() => { lastWriteRef.current.pending = null })
-      onSound('move')
     }
   }
 
@@ -635,15 +711,38 @@ export default function PuzzleBoard({
       drawRef.current?.()
       return
     }
+
     const drag = dragRef.current
-    if (!drag || drag.pointerId !== event.pointerId) {
-      const pending = pendingPointerRef.current
-      if (pending?.pointerId === event.pointerId) {
+
+    if (drag?.kind === 'piece') {
+      const anchor = drag.anchor
+      if (anchor && anchor.pointerId === event.pointerId) {
+        drag.anchor = null
+        if (!anchor.moved) await dropPiece() // a tap drops the piece
+        return
+      }
+      if (drag.pointerId === event.pointerId && drag.pressing) {
+        drag.pressing = false
+        const point = pointFromEvent(event)
+        // press-and-drag then release = drop; a plain tap/click keeps carrying
+        if (drag.downPoint && Math.hypot(point.x - drag.downPoint.x, point.y - drag.downPoint.y) > 6) await dropPiece()
+      }
+      return
+    }
+
+    const pending = pendingPointerRef.current
+    if (pending?.pointerId === event.pointerId && pending.pressing) {
+      const point = pointFromEvent(event)
+      if (Math.hypot(point.x - pending.point.x, point.y - pending.point.y) <= 6) {
+        pending.pressing = false // it was a tap: keep carrying once the lock arrives
+      } else {
         pending.released = true
         pendingPointerRef.current = null
       }
       return
     }
+
+    if (!drag || drag.pointerId !== event.pointerId) return
     if (drag.kind === 'pan') {
       dragRef.current = null
       drawRef.current?.()
@@ -661,30 +760,7 @@ export default function PuzzleBoard({
           lastTapRef.current = { ...point, at: now }
         }
       }
-      return
     }
-
-    const piece = drag.piece
-    const withinBoard = piece.x >= 0 && piece.y >= 0 && piece.x <= gridRef.current.width && piece.y <= gridRef.current.height
-    const correct = (piece.rotation || 0) % 360 === 0 && isCorrectPlacement(piece, piece.x, piece.y, viewRef.current.scale)
-    if (correct) {
-      piece.x = piece.targetX
-      piece.y = piece.targetY
-      piece.placed = true
-      piece.placedBy = user.uid
-      onSound('correct')
-    } else if (withinBoard) {
-      onSound('incorrect')
-    }
-
-    indexRef.current.update(piece)
-    drawRef.current?.()
-    dragRef.current = null
-    const queued = lastWriteRef.current.pending
-    if (queued) await queued
-    await roomControl.release(piece.id, { x: piece.x, y: piece.y, placed: correct, rotation: piece.rotation || 0 })
-    drawRef.current?.()
-    trayDrawRef.current?.()
   }
 
   async function rotateSelected() {
@@ -748,6 +824,7 @@ export default function PuzzleBoard({
     }
     if (event.key === 'Escape' && piece) {
       event.preventDefault()
+      if (dragRef.current?.piece === piece) dragRef.current = null
       await roomControl.release(piece.id, { x: piece.x, y: piece.y, placed: false, rotation: piece.rotation || 0 })
       selectedPieceRef.current = null
       drawRef.current?.()

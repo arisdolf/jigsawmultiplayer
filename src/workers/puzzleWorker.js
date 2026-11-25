@@ -1,11 +1,13 @@
 import { generatePuzzlePieces, getPiecePath } from '../utils/puzzleEngine'
 
 self.onmessage = async (event) => {
-  const { pieceCount, imageAspect } = event.data
+  
+   const { pieceCount, imageAspect, seed } = event.data
   try {
     const { grid, pieces } = await generatePuzzlePieces({
       pieceCount,
       imageAspect,
+      seed,
       onProgress: (progress) => self.postMessage({ type: 'progress', progress: progress * 0.7 }),
     })
     const piecesWithPaths = new Array(pieces.length)
