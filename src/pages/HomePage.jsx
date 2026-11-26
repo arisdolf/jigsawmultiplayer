@@ -10,7 +10,7 @@ export default function HomePage({
   error,
   user,
   stats,
-  recentlyPlayed,
+  recentLevels = [],
   onPlay,
   onCreateRoom,
   onJoinRoom,
@@ -18,8 +18,8 @@ export default function HomePage({
   onRetry,
 }) {
   const [featuredImageSize, setFeaturedImageSize] = useState(null)
-  const featured = levels.find((level) => level.isActive && !level.isLocked) || levels[0]
-  const recentLevel = recentlyPlayed ? levels.find((level) => level.id === recentlyPlayed) : null
+  const recentLevel = recentLevels[0] || null
+  const featured = recentLevel || levels.find((level) => level.isActive && !level.isLocked) || levels[0]
   const featuredRotation = ((Number(featured?.imageRotation) || 0) % 360 + 360) % 360
   const measuredImage = featuredImageSize?.url === featured?.imageURL ? featuredImageSize : null
   const imageAspect = measuredImage ? measuredImage.width / measuredImage.height : 1.5
@@ -40,7 +40,7 @@ export default function HomePage({
           <p className="hero-description">Meet your people at the puzzle table. Find the edge pieces, trade a few stories, and take your time.</p>
           <div className="hero-actions">
             <button className="button button-primary button-large" type="button" onClick={() => featured && onPlay(featured)} disabled={!featured || loading}>
-              <Puzzle size={19} /> Play now <ArrowRight size={18} />
+              <Puzzle size={19} /> {recentLevel ? 'Continue' : 'Play now'} <ArrowRight size={18} />
             </button>
             <button className="button button-outline button-large" type="button" onClick={onCreateRoom}>
               <UsersRound size={18} /> Make a room
@@ -55,10 +55,9 @@ export default function HomePage({
             <>
               <div className="hero-image-frame"><img className={featuredRotation % 180 ? 'is-quarter-turn' : undefined} src={featured.imageURL} alt={featured.imageAlt || ''} onLoad={rememberFeaturedImage} style={{ '--level-image-rotation': `${featuredRotation}deg` }} /></div>
               <div className="hero-image-wash" />
-              <div className="hero-art-topline"><span className="hero-art-tag"><span className="tiny-sparkle">✦</span> TODAY'S PUZZLE</span><span className="hero-art-index">{String(featured.order).padStart(2, '0')} / 10</span></div>
-              <div className="hero-art-caption"><div><p>Start with something lovely</p><h2>{featured.title}</h2><span>{featured.pieceCount.toLocaleString()} pieces <i /> {featured.difficulty}</span></div><button type="button" className="hero-art-play" aria-label={`Play ${featured.title}`} onClick={() => onPlay(featured)}><ArrowUpRight size={19} /></button></div>
-              <div className="floating-note note-left"><span className="note-icon"><Heart size={15} fill="currentColor" /></span><div><strong>Better together</strong><small>Up to 8 puzzle pals</small></div></div>
-              <div className="floating-note note-right"><span className="note-icon note-coral"><Clock3 size={15} /></span><div><strong>Go slow</strong><small>No rush, ever</small></div></div>
+              <div className="hero-art-topline"><span className="hero-art-tag"><span className="tiny-sparkle">✦</span> {recentLevel ? 'LAST PLAYED' : "TODAY'S PUZZLE"}</span><span className="hero-art-index">{String(featured.order).padStart(2, '0')} / 10</span></div>
+              <div className="hero-art-caption"><div><p>{recentLevel ? 'Pick up where you left off' : 'Start with something lovely'}</p><h2>{featured.title}</h2><span>{featured.pieceCount.toLocaleString()} pieces <i /> {featured.difficulty}</span></div><button type="button" className="hero-art-play" aria-label={`Play ${featured.title}`} onClick={() => onPlay(featured)}><ArrowUpRight size={19} /></button></div>
+      
             </>
           ) : (
             <div className="hero-art-empty"><Puzzle size={42} /><strong>Your next table is taking shape.</strong><span>{error || 'Connect Firebase or load the local puzzle library to begin.'}</span>{error && <button type="button" className="button button-quiet" onClick={onRetry}>Try again</button>}</div>
@@ -76,6 +75,31 @@ export default function HomePage({
           <button type="submit" className="button button-dark">Join room <ArrowRight size={16} /></button>
         </form>
       </section>
+
+      {recentLevels.length > 1 && (
+        <section className="recent-section" aria-labelledby="recent-title">
+          <div className="section-title-row"><div><p className="section-eyebrow">PICK UP WHERE YOU LEFT OFF</p><h2 id="recent-title">Recently played</h2></div></div>
+          <div className="recent-row">
+            {recentLevels.slice(1).map((level, i) => {
+              const rotation = ((Number(level.imageRotation) || 0) % 360 + 360) % 360
+              return (
+                <button key={level.id} type="button" className="recent-card" onClick={() => onPlay(level)} aria-label={`Continue ${level.title}`}>
+                  <span className="recent-thumb">
+                    <img className={rotation % 180 ? 'is-quarter-turn' : undefined} src={level.imageURL} alt="" loading="lazy" style={{ '--level-image-rotation': `${rotation}deg` }} />
+
+                    {level.completed && <span className="recent-badge is-done"><Check size={12} /> Finished</span>}
+                  </span>
+                  <span className="recent-info">
+                    <strong>{level.title}</strong>
+                    <small>{level.pieceCount.toLocaleString()} pieces · {level.difficulty}</small>
+                    <span className="recent-cta">{level.completed ? 'Play again' : 'Continue'} <ArrowUpRight size={14} /></span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+      )}
 
       {loading ? (
         <section className="featured-section" aria-label="Loading puzzle library"><div className="section-title-row"><h2>Pick a little scene</h2></div><div className="level-grid home-level-grid">{[1, 2, 3].map((item) => <div key={item} className="level-skeleton" />)}</div></section>

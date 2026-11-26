@@ -1,0 +1,107 @@
+/* ---------- easing ---------- */
+:root {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+/* ---------- page transitions ---------- */
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(10px) scale(.96); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* every screen slides up and fades in when it mounts */
+.app-shell > main:not(.app-loading) {
+  animation: page-in .45s var(--ease-out) backwards;
+}
+/* the game page has fixed-position children (chat drawer, finish screen),
+   and a transform would break them, so it only fades */
+.app-shell > main.game-page {
+  animation: fade-in .4s ease backwards;
+}
+
+/* ---------- staggered entrances ---------- */
+.level-grid > *,
+.recent-row > *,
+.steps-row > .step,
+.room-member-list > *,
+.contributor-list > *,
+.profile-completion-list > li {
+  animation: pop-in .5s var(--ease-out) backwards;
+}
+.level-grid > :nth-child(1), .recent-row > :nth-child(1), .steps-row > .step:nth-of-type(1), .room-member-list > :nth-child(1) { animation-delay: .05s; }
+.level-grid > :nth-child(2), .recent-row > :nth-child(2), .steps-row > .step:nth-of-type(2), .room-member-list > :nth-child(2) { animation-delay: .12s; }
+.level-grid > :nth-child(3), .recent-row > :nth-child(3), .steps-row > .step:nth-of-type(3), .room-member-list > :nth-child(3) { animation-delay: .19s; }
+.level-grid > :nth-child(4), .recent-row > :nth-child(4), .room-member-list > :nth-child(4) { animation-delay: .26s; }
+.level-grid > :nth-child(5), .recent-row > :nth-child(5) { animation-delay: .33s; }
+.level-grid > :nth-child(n+6), .recent-row > :nth-child(n+6) { animation-delay: .4s; }
+
+/* home hero: copy, then the card */
+.hero-copy > * { animation: slide-up .6s var(--ease-out) backwards; }
+.hero-copy > :nth-child(1) { animation-delay: .05s; }
+.hero-copy > :nth-child(2) { animation-delay: .12s; }
+.hero-copy > :nth-child(3) { animation-delay: .19s; }
+.hero-copy > :nth-child(4) { animation-delay: .26s; }
+.hero-copy > :nth-child(n+5) { animation-delay: .33s; }
+.hero-art { animation: slide-up .7s .15s var(--ease-out) backwards; }
+
+.join-strip, .home-lower-grid, .room-setup, .room-people-section,
+.room-chat-column, .profile-card, .admin-editor, .join-page-card {
+  animation: slide-up .55s .1s var(--ease-out) backwards;
+}
+
+/* ---------- dialogs ---------- */
+.app-modal[open] { animation: pop-in .28s var(--ease-spring); }
+.app-modal[open]::backdrop { animation: fade-in .25s ease; }
+
+/* ---------- toast, chat, panels ---------- */
+.toast { animation: pop-in .3s var(--ease-spring); }
+.chat-message { animation: pop-in .3s var(--ease-out); }
+.game-chat-area.is-open { animation: slide-up .3s var(--ease-out); }
+.board-paused-overlay { animation: fade-in .3s ease; }
+.completion-screen { animation: fade-in .6s ease both; }
+
+/* ---------- hover and press feedback ---------- */
+.button, .nav-link, .board-tool, .recent-card, .icon-button, .sound-quick {
+  transition: transform .18s var(--ease-out), box-shadow .18s ease, background .18s ease, color .18s ease;
+}
+.button:active:not(:disabled),
+.board-tool:active,
+.recent-card:active,
+.icon-button:active { transform: scale(.96); }
+.level-card:active { transform: scale(.985); }
+
+.level-open-icon { transition: transform .25s var(--ease-spring); }
+.level-card:hover .level-open-icon { transform: translate(2px, -2px) scale(1.08); }
+
+/* ---------- navigation ---------- */
+.nav-link.active, .mobile-nav-link.active { animation: fade-in .25s ease; }
+.mobile-nav-link svg { transition: transform .25s var(--ease-spring); }
+.mobile-nav-link.active svg { transform: translateY(-2px) scale(1.12); }
+
+/* ---------- little extras ---------- */
+.toggle-switch, .toggle-switch i { transition: .25s var(--ease-out); }
+.progress-track i { transition: width .5s var(--ease-out); }
+.live-dot { animation: pulse-dot 2s ease-in-out infinite; }
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(130, 162, 143, .12); }
+  50%      { box-shadow: 0 0 0 6px rgba(130, 162, 143, 0); }
+}
+.hero-doodle { animation: float 5s ease-in-out infinite; }
+.doodle-two { animation-delay: -2.5s; }
+@keyframes float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-8px) rotate(8deg); }
+}

@@ -22,6 +22,23 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const RECENT_LEVEL_KEY = 'jigsawmult-recent-level'
 const ROOM_VISITS_KEY = 'jigsawmult-room-visits'
 
+const RECENT_LEVELS_KEY = 'jigsawmult-recent-levels'
+
+function readRecentIds() {
+  try {
+    const list = JSON.parse(localStorage.getItem(RECENT_LEVELS_KEY) || 'null')
+    if (Array.isArray(list)) return list
+  } catch { /* ignore */ }
+  const old = localStorage.getItem(RECENT_LEVEL_KEY) // older single-level save
+  return old ? [old] : []
+}
+
+function rememberLevel(id) {
+  const next = [id, ...readRecentIds().filter((item) => item !== id)].slice(0, 6)
+  try { localStorage.setItem(RECENT_LEVELS_KEY, JSON.stringify(next)) } catch { /* ignore */ }
+  return next
+}
+
 function storeVisit(uid, roomId) {
   try {
     const all = JSON.parse(localStorage.getItem(ROOM_VISITS_KEY) || '{}')
@@ -54,7 +71,7 @@ export default function App() {
   const [audioOpen, setAudioOpen] = useState(false)
   const [roomBusy, setRoomBusy] = useState(false)
   const [visits, setVisits] = useState(0)
-  const [recentLevelId, setRecentLevelId] = useState(() => localStorage.getItem(RECENT_LEVEL_KEY))
+ const [recentIds, setRecentIds] = useState(readRecentIds)
   const lastStatus = useRef({ roomId: null, status: null })
   const autoJoinStarted = useRef(false)
   const selectedLevel = levelRecords.find((level) => level.id === roomControl.room.meta?.levelId)
@@ -103,7 +120,10 @@ export default function App() {
     isLocked: Boolean(level.isLocked || (level.requiredLevelId && !completedIds.has(level.requiredLevelId))),
     completed: completedIds.has(level.id),
   })), [levelRecords, completedIds])
-  const recentLevel = levels.find((level) => level.id === recentLevelId)
+  const recentLevels = useMemo(
+  () => recentIds.map((id) => levels.find((level) => level.id === id)).filter(Boolean),
+  [recentIds, levels],
+)
   const stats = useMemo(() => ({
     completed: new Set(completions.map((item) => item.levelId)).size,
     rooms: visits,
@@ -183,8 +203,7 @@ export default function App() {
 
   const playLevel = useCallback((level) => {
     if (level.isLocked) { tell('Finish its required level to open this puzzle.', 'info'); return }
-    localStorage.setItem(RECENT_LEVEL_KEY, level.id)
-    setRecentLevelId(level.id)
+    setRecentIds(rememberLevel(level.id))
     void createRoom(level)
   }, [createRoom, tell])
 
@@ -205,8 +224,7 @@ export default function App() {
     if (!next) { setScreen('room'); tell('You reached the end of the puzzle shelf.', 'success'); return }
     try {
       await roomControl.reset(next.id)
-      localStorage.setItem(RECENT_LEVEL_KEY, next.id)
-      setRecentLevelId(next.id)
+      setRecentIds(rememberLevel(next.id))
       setScreen('room')
       tell(`${next.title} is ready at the table.`, 'success')
     } catch (error) {
@@ -234,7 +252,7 @@ export default function App() {
   return <div className={`app-shell ${screen === 'game' ? 'is-game' : ''}`}>
     <TopBar screen={screen} onNavigate={setScreen} user={auth.user} isAdmin={auth.isAdmin} onSignIn={() => setAuthOpen(true)} onSignOut={auth.signOut} onProfile={() => auth.user ? setScreen('profile') : setAuthOpen(true)} audio={audio} onBack={() => setScreen('room')} onAudioSettings={() => setAudioOpen(true)} />
     <Suspense fallback={<LoadingScreen />}>
-      {showGame ? <GamePage roomControl={roomControl} level={selectedLevel} user={auth.user} audio={audio} onLeave={leaveRoom} onBackToRoom={() => setScreen('room')} onShare={shareRoom} onNextLevel={nextLevel} onCompletionSaved={refreshCompletions} /> : screen === 'room' && roomId ? <RoomPage roomControl={roomControl} levels={levels} user={auth.user} onShare={shareRoom} onGame={() => setScreen('game')} onLeave={leaveRoom} onBack={() => setScreen('home')} /> : screen === 'levels' ? <LevelsPage levels={levels} loading={levelsLoading} error={levelsError} completions={completions} onPlay={playLevel} onRetry={refreshLevels} onBack={() => setScreen('home')} /> : screen === 'rooms' ? <JoinRoom busy={roomBusy} onJoin={joinRoom} onCreate={() => void createRoom()} /> : screen === 'admin' ? <AdminPage levels={levelRecords} isAdmin={auth.isAdmin} firebaseReady={auth.firebaseReady} onSave={saveAdminLevel} onReload={refreshLevels} /> : screen === 'profile' && auth.user ? <ProfilePage user={auth.user} completions={completions} levels={levels} onBack={() => setScreen('home')} onRename={auth.rename} onSignOut={auth.signOut} isAdmin={auth.isAdmin} onAdmin={() => setScreen('admin')} /> : <HomePage levels={levels} loading={levelsLoading} error={levelsError} user={auth.user} stats={stats} recentlyPlayed={recentLevel?.id} onPlay={playLevel} onCreateRoom={() => void createRoom()} onJoinRoom={joinRoom} onBrowse={() => setScreen('levels')} onRetry={refreshLevels} />}
+      {showGame ? <GamePage roomControl={roomControl} level={selectedLevel} user={auth.user} audio={audio} onLeave={leaveRoom} onBackToRoom={() => setScreen('room')} onShare={shareRoom} onNextLevel={nextLevel} onCompletionSaved={refreshCompletions} /> : screen === 'room' && roomId ? <RoomPage roomControl={roomControl} levels={levels} user={auth.user} onShare={shareRoom} onGame={() => setScreen('game')} onLeave={leaveRoom} onBack={() => setScreen('home')} /> : screen === 'levels' ? <LevelsPage levels={levels} loading={levelsLoading} error={levelsError} completions={completions} onPlay={playLevel} onRetry={refreshLevels} onBack={() => setScreen('home')} /> : screen === 'rooms' ? <JoinRoom busy={roomBusy} onJoin={joinRoom} onCreate={() => void createRoom()} /> : screen === 'admin' ? <AdminPage levels={levelRecords} isAdmin={auth.isAdmin} firebaseReady={auth.firebaseReady} onSave={saveAdminLevel} onReload={refreshLevels} /> : screen === 'profile' && auth.user ? <ProfilePage user={auth.user} completions={completions} levels={levels} onBack={() => setScreen('home')} onRename={auth.rename} onSignOut={auth.signOut} isAdmin={auth.isAdmin} onAdmin={() => setScreen('admin')} /> : <HomePage levels={levels} loading={levelsLoading} error={levelsError} user={auth.user} stats={stats} recentLevels={recentLevels} onPlay={playLevel} onCreateRoom={() => void createRoom()} onJoinRoom={joinRoom} onBrowse={() => setScreen('levels')} onRetry={refreshLevels} />}
     </Suspense>
     <div className="app-footnote"><CircleHelp size={13} /> Cozy games work best with friends. Keep your room code close.</div>
     <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} auth={auth} onAuthenticated={() => { setAuthOpen(false); tell('Welcome to the puzzle table.', 'success') }} />
