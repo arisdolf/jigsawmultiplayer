@@ -87,6 +87,12 @@ export default function PuzzleBoard({
   const seededRef = useRef(false)
   const lastTapRef = useRef(null)
   const celebrationRef = useRef(null)
+    const spritesRef = useRef(new Map())
+      const sceneRef = useRef({ canvas: null, dirty: true, excluded: new Set() })
+  const spriteInfoRef = useRef({ margin: 0, scale: 1, layerScale: 1 })
+  const placedLayerRef = useRef(null)
+  const paintedRef = useRef(new Set())
+  const flashingRef = useRef(new Set())
   const renderRef = useRef(null)
   const frameRef = useRef(0)
   const [rising, setRising] = useState(false)
@@ -197,10 +203,28 @@ export default function PuzzleBoard({
           })
         })
         fittedRef.current = false
-        gridRef.current = grid
+                gridRef.current = grid
         boardImageRef.current = imageCanvas
         piecesRef.current = pieceMap
         rebuildGroups()
+
+        // sprites: sized so the biggest stays under ~190px
+        const margin = grid.cellSize * 0.42
+        const scale = Math.min(2, 190 / (grid.cellSize + margin * 2))
+                const layerScale = Math.min(IS_TOUCH ? 1 : 1.6, 3000 / Math.max(grid.width, grid.height))
+        spriteInfoRef.current = { margin, scale, layerScale }
+        spritesRef.current = new Map()
+        placedLayerRef.current = null
+        flashingRef.current = new Set()
+        const all = [...pieceMap.values()]
+        for (let i = 0; i < all.length; i += 40) {
+          if (cancelled) return
+          all.slice(i, i + 40).forEach((piece) => spritesRef.current.set(piece.id, buildSprite(piece, grid, imageCanvas)))
+          await new Promise((resolve) => setTimeout(resolve, 0)) // keep the page responsive
+        }
+        if (cancelled) return
+        rebuildPlacedLayer()
+        markDirty()
         pathCacheRef.current.clear()
         indexRef.current = new SpatialIndex(grid.cellSize)
         pieceMap.forEach((piece) => indexRef.current.insert(piece))
@@ -261,24 +285,27 @@ export default function PuzzleBoard({
       rebuildGroups()
       indexRef.current = new SpatialIndex(gridRef.current.cellSize)
       next.forEach((piece) => indexRef.current.insert(piece))
+      rebuildPlacedLayer()
       drawRef.current?.()
       return
     }
     const local = piecesRef.current.get(event.piece.id)
     if (!local) return
-    const drag = dragRef.current
+        const drag = dragRef.current
     const carried = drag?.kind === 'piece' && drag.members.some((member) => member.piece.id === event.piece.id)
-    const x = local.x
-    const y = local.y
-    const rotation = local.rotation
+    // our own drag echoing back from Firebase: nothing to do
+    if (carried && event.piece.movingBy === user.uid && !event.piece.placed) return
+
     const wasPlaced = local.placed
     const before = local.group || local.id
     Object.assign(local, { movingBy: null, placedBy: null, placedByName: null }, event.piece)
     const after = local.group || local.id
     if (before !== after) { local.group = before; regroup(local, after) }
-    if (!wasPlaced && local.placed) local.flashAt = Date.now()
-    if (carried && event.piece.movingBy === user.uid && !event.piece.placed) { local.x = x; local.y = y; local.rotation = rotation }
+    if (!wasPlaced && local.placed) flash(local)
+    syncPlaced(local)
     indexRef.current?.update(local)
+    // someone else dragging a piece we already draw live: no rebuild needed
+    if (!(sceneRef.current.excluded.has(local.id) && isLive(local))) markDirty()
     drawRef.current?.()
   }), [roomControl.subscribePieces, user?.uid])
 
@@ -348,7 +375,7 @@ export default function PuzzleBoard({
     resize()
     return () => observer.disconnect()
   }, [generation.ready])
-
+    useEffect(() => { markDirty(); drawRef.current?.() }, [referenceVisible])
   // entering / leaving full screen: fit the board to the new size
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -370,7 +397,8 @@ export default function PuzzleBoard({
     if (!canvas || !grid || !index) return
 
     const context = canvas.getContext('2d')
-        const dpr = getDpr(grid.count || 0)
+    context.imageSmoothingQuality = IS_TOUCH ? 'low' : 'medium'
+    const dpr = getDpr(grid.count || 0)
     const width = canvas.width / dpr
     const height = canvas.height / dpr
     const celebration = celebrationRef.current
@@ -390,74 +418,53 @@ export default function PuzzleBoard({
       }
     }
     const view = viewRef.current
-    const bounds = grid.bounds || { x: 0, y: 0, width: grid.width, height: grid.height }
+    const px = 1 / view.scale
+    const bounds = grid.bounds
+    const boardRadius = Math.min(22, grid.cellSize * 0.2)
     context.setTransform(dpr, 0, 0, dpr, 0, 0)
     context.clearRect(0, 0, width, height)
     context.fillStyle = '#e5edf2'
     context.fillRect(0, 0, width, height)
     context.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.panX, dpr * view.panY)
 
-    const boardRadius = Math.min(22, grid.cellSize * 0.2)
+    const scene = sceneRef.current
+    const useCache = !celebration && view.scale <= cacheScale(grid) * 1.25
+    let live
+    if (useCache) {
+      if (scene.dirty || !scene.canvas) buildScene(grid, image)
+      context.drawImage(scene.canvas, bounds.x, bounds.y, bounds.width, bounds.height)
+      live = [...scene.excluded].map((id) => piecesRef.current.get(id)).filter((piece) => piece && !piece.placed)
+    } else {
+      scene.dirty = true // cache goes stale while drawing live
+      drawBackdrop(context, grid, image, px, !IS_TOUCH)
+      const visible = {
+        x: (0 - view.panX) / view.scale,
+        y: (0 - view.panY) / view.scale,
+        width: width / view.scale,
+        height: height / view.scale,
+      }
+      live = index.query(visible, grid.cellSize).filter((piece) => !piece.placed)
+    }
+    live.sort((a, b) => a.stackOrder - b.stackOrder)
 
-    // the table the loose pieces are scattered on
-    context.save()
-    context.fillStyle = '#f3eee5'
-    context.strokeStyle = 'rgba(82, 127, 168, 0.18)'
-    context.lineWidth = 1 / view.scale
-    context.beginPath()
-    context.roundRect(bounds.x, bounds.y, bounds.width, bounds.height, boardRadius * 1.5)
-    context.fill()
-    context.stroke()
-    context.restore()
-
-    // the puzzle board in the middle
-    context.save()
-    context.shadowColor = 'rgba(41, 76, 112, 0.14)'
-    context.shadowBlur = 24
-    context.shadowOffsetY = 10
-    context.fillStyle = '#fafcff'
-    context.beginPath()
-    context.roundRect(0, 0, grid.width, grid.height, boardRadius)
-    context.fill()
-    context.restore()
-
-    if (referenceVisible && image && !celebration) {
+    if (celebration && image) {
+      const maxR = Math.hypot(grid.width / 2, grid.height / 2)
       context.save()
-      context.globalAlpha = 0.16
       context.beginPath()
       context.roundRect(0, 0, grid.width, grid.height, boardRadius)
+      context.clip()
+      context.beginPath()
+      context.arc(grid.width / 2, grid.height / 2, clamp(fadeP * 1.15, 0, 1.05) * maxR, 0, Math.PI * 2)
       context.clip()
       context.drawImage(image, 0, 0, grid.width, grid.height)
       context.restore()
     }
 
-    const margin = grid.cellSize * 0.42
-    const visible = {
-      x: (0 - view.panX) / view.scale,
-      y: (0 - view.panY) / view.scale,
-      width: width / view.scale,
-      height: height / view.scale,
-    }
-    const pieces = index.query(visible, grid.cellSize)
-      .sort((a, b) => (a.placed === b.placed ? a.stackOrder - b.stackOrder : a.placed ? -1 : 1))
-    let animating = false
-    const cheap = IS_TOUCH || pieces.length > 120
-    pieces.forEach((piece) => {
-      const path = piecePath(piece)
-      context.save()
-      context.translate(piece.x + piece.width / 2, piece.y + piece.height / 2)
-      context.rotate(((piece.rotation || 0) * Math.PI) / 180)
-      context.translate(-piece.width / 2, -piece.height / 2)
-      context.beginPath()
-      context.clip(path)
-      if (image) {
-        const sourceSize = piece.width + margin * 2
-        context.drawImage(image, piece.targetX - margin, piece.targetY - margin, sourceSize, sourceSize, -margin, -margin, sourceSize, sourceSize)
-      } else {
-        context.fillStyle = '#527fa8'
-        context.fillRect(-margin, -margin, piece.width + margin * 2, piece.height + margin * 2)
-      }
-      context.restore()
+    live.forEach((piece) => {
+      const selected = piece === selectedPieceRef.current
+      const active = selected || piece === dragRef.current?.piece
+      drawSprite(context, piece, px, active, selected)
+
       if (piece.movingBy && piece.movingBy !== user?.uid && piece.id === (piece.group || piece.id) && piece.width * view.scale > 46) {
         const playerName = players.find((player) => player.uid === piece.movingBy)?.displayName || 'Puzzle Pal'
         context.save()
@@ -472,88 +479,29 @@ export default function PuzzleBoard({
         context.fillText(playerName, view.panX + piece.x * view.scale + 9, view.panY + piece.y * view.scale - 10)
         context.restore()
       }
+    })
 
-      let highlight = 1
-      if (celebration) {
-        const cx = piece.x + piece.width / 2 - grid.width / 2
-        const cy = piece.y + piece.height / 2 - grid.height / 2
-        const dist = Math.hypot(cx, cy) / Math.hypot(grid.width / 2, grid.height / 2)
-        highlight = 1 - clamp((fadeP * 1.5 - dist) / 0.5, 0, 1)
-      }
-      if (highlight <= 0.01) return
-            if (cheap && piece.placed && !celebration && piece.width * view.scale < 12) return
+    // green "click" glow on pieces that just snapped in or joined
+    let animating = false
+    const now = Date.now()
+    flashingRef.current.forEach((piece) => {
+      const glow = Math.max(0, 1 - (now - (piece.flashAt || 0)) / 1400)
+      if (glow <= 0) { flashingRef.current.delete(piece); return }
+      animating = true
+      if (celebration) return
       context.save()
-      context.globalAlpha = highlight
       context.translate(piece.x + piece.width / 2, piece.y + piece.height / 2)
       context.rotate(((piece.rotation || 0) * Math.PI) / 180)
       context.translate(-piece.width / 2, -piece.height / 2)
-      const selected = piece === selectedPieceRef.current
-      const active = selected || piece === dragRef.current?.piece
-      const px = 1 / view.scale
-
-      // outline + soft shadow
-      context.lineWidth = (active ? 2.2 : 1.1) * px
-      context.strokeStyle = piece.placed ? 'rgba(41, 76, 112, 0.3)' : selected ? 'rgba(217, 104, 104, 0.9)' : 'rgba(41, 76, 112, 0.5)'
-      context.shadowColor = cheap && !active ? 'transparent' : active ? 'rgba(41, 76, 112, 0.36)' : 'rgba(41, 76, 112, 0.16)'
-            context.shadowBlur = cheap && !active ? 0 : (active ? (IS_TOUCH ? 8 : 18) : 5) * px
-      context.shadowOffsetY = 2 * px
-      context.stroke(path)
-      context.shadowColor = 'transparent'
-      context.shadowBlur = 0
-      context.shadowOffsetY = 0
-
-      // white highlight inside the shape, for a real cut-cardboard look
-      if (!cheap && piece.width * view.scale > 14) {
-        const angle = -((piece.rotation || 0) * Math.PI) / 180
-        const d = 1.3 * px
-        const ox = d * (Math.cos(angle) - Math.sin(angle))
-        const oy = d * (Math.sin(angle) + Math.cos(angle))
-        context.save()
-        context.clip(path)
-        context.strokeStyle = 'rgba(255, 255, 255, 0.55)'
-        context.lineWidth = 2.4 * px
-        context.stroke(path)
-        context.save()
-        context.translate(ox, oy)
-        context.strokeStyle = 'rgba(255, 255, 255, 0.8)'
-        context.lineWidth = 1.8 * px
-        context.stroke(path)
-        context.restore()
-        context.save()
-        context.translate(-ox, -oy)
-        context.strokeStyle = 'rgba(20, 40, 70, 0.28)'
-        context.lineWidth = 1.8 * px
-        context.stroke(path)
-        context.restore()
-        context.restore()
-      }
-
-      // green glow when a piece clicks into place
-      const flash = piece.flashAt ? Math.max(0, 1 - (Date.now() - piece.flashAt) / 1400) : 0
-      if (flash > 0) {
-        animating = true
-        context.strokeStyle = `rgba(46, 176, 102, ${0.95 * flash})`
-        context.lineWidth = 3.4 * px
-        context.shadowColor = `rgba(46, 176, 102, ${0.8 * flash})`
+      context.strokeStyle = `rgba(46, 176, 102, ${0.95 * glow})`
+      context.lineWidth = 3.4 * px
+      if (!IS_TOUCH) {
+        context.shadowColor = `rgba(46, 176, 102, ${0.8 * glow})`
         context.shadowBlur = 14 * px
-        context.stroke(path)
       }
+      context.stroke(piecePath(piece))
       context.restore()
     })
-
-
-    if (celebration && image) {
-      const reveal = clamp((fadeP - 0.85) / 0.15, 0, 1)
-      if (reveal > 0) {
-        context.save()
-        context.globalAlpha = reveal
-        context.beginPath()
-        context.roundRect(0, 0, grid.width, grid.height, boardRadius)
-        context.clip()
-        context.drawImage(image, 0, 0, grid.width, grid.height)
-        context.restore()
-      }
-    }
 
     const celebrating = celebration && Date.now() - celebration.start < FADE_MS + ZOOM_MS + 60
     if ((animating || celebrating) && !rafRef.current) {
@@ -567,6 +515,181 @@ export default function PuzzleBoard({
       frameRef.current = 0
       renderRef.current?.()
     })
+  }
+    const markDirty = () => { sceneRef.current.dirty = true }
+
+  // pieces that must be drawn live on top of the cache (held, selected, or moved by someone else)
+  function isLive(piece) {
+    const drag = dragRef.current
+    if (drag?.kind === 'piece' && drag.members.some((m) => m.piece === piece)) return true
+    if (piece === selectedPieceRef.current) return true
+    return Boolean(piece.movingBy && Number(piece.lockUntil) > Date.now())
+  }
+
+  function cacheScale(grid) {
+    const b = grid.bounds
+    return Math.min(1, (IS_TOUCH ? 2200 : 3200) / Math.max(b.width, b.height))
+  }
+
+  function drawBackdrop(context, grid, image, px, shadows) {
+    const bounds = grid.bounds
+    const radius = Math.min(22, grid.cellSize * 0.2)
+    context.fillStyle = '#f3eee5'
+    context.strokeStyle = 'rgba(82, 127, 168, 0.18)'
+    context.lineWidth = px
+    context.beginPath()
+    context.roundRect(bounds.x, bounds.y, bounds.width, bounds.height, radius * 1.5)
+    context.fill()
+    context.stroke()
+
+    context.save()
+    if (shadows) {
+      context.shadowColor = 'rgba(41, 76, 112, 0.14)'
+      context.shadowBlur = 24
+      context.shadowOffsetY = 10
+    }
+    context.fillStyle = '#fafcff'
+    context.beginPath()
+    context.roundRect(0, 0, grid.width, grid.height, radius)
+    context.fill()
+    context.restore()
+
+    if (referenceVisible && image && !celebrationRef.current) {
+      context.save()
+      context.globalAlpha = 0.16
+      context.beginPath()
+      context.roundRect(0, 0, grid.width, grid.height, radius)
+      context.clip()
+      context.drawImage(image, 0, 0, grid.width, grid.height)
+      context.restore()
+    }
+    if (placedLayerRef.current) context.drawImage(placedLayerRef.current, 0, 0, grid.width, grid.height)
+  }
+
+  function drawSprite(context, piece, px, active = false, selected = false) {
+    const sprite = spritesRef.current.get(piece.id)
+    if (!sprite) return
+    const { margin } = spriteInfoRef.current
+    const size = piece.width + margin * 2
+    context.save()
+    context.translate(piece.x + piece.width / 2, piece.y + piece.height / 2)
+    context.rotate(((piece.rotation || 0) * Math.PI) / 180)
+    if (active) {
+      context.shadowColor = 'rgba(41, 76, 112, 0.36)'
+      context.shadowBlur = (IS_TOUCH ? 6 : 16) * px
+      context.shadowOffsetY = 3 * px
+    }
+    context.drawImage(sprite, -piece.width / 2 - margin, -piece.height / 2 - margin, size, size)
+    if (selected) {
+      context.shadowColor = 'transparent'
+      context.translate(-piece.width / 2, -piece.height / 2)
+      context.strokeStyle = 'rgba(217, 104, 104, 0.9)'
+      context.lineWidth = 2.4 * px
+      context.stroke(piecePath(piece))
+    }
+    context.restore()
+  }
+
+  // bakes table + board + placed + every idle loose piece into one bitmap
+  function buildScene(grid, image) {
+    const scene = sceneRef.current
+    const bounds = grid.bounds
+    const scale = cacheScale(grid)
+    const w = Math.ceil(bounds.width * scale)
+    const h = Math.ceil(bounds.height * scale)
+    if (!scene.canvas || scene.canvas.width !== w || scene.canvas.height !== h) {
+      scene.canvas = document.createElement('canvas')
+      scene.canvas.width = w
+      scene.canvas.height = h
+    }
+    const g = scene.canvas.getContext('2d')
+    g.setTransform(1, 0, 0, 1, 0, 0)
+    g.clearRect(0, 0, w, h)
+    g.setTransform(scale, 0, 0, scale, -bounds.x * scale, -bounds.y * scale)
+    const excluded = new Set()
+    const idle = []
+    piecesRef.current.forEach((piece) => {
+      if (piece.placed) return
+      if (isLive(piece)) excluded.add(piece.id)
+      else idle.push(piece)
+    })
+    drawBackdrop(g, grid, image, 1 / scale, false)
+    idle.sort((p, q) => p.stackOrder - q.stackOrder).forEach((piece) => drawSprite(g, piece, 1 / scale))
+    scene.excluded = excluded
+    scene.dirty = false
+  }
+    // one pre-rendered bitmap per piece: image clipped to the piece shape + baked outline
+  function buildSprite(piece, grid, image) {
+    const { margin, scale } = spriteInfoRef.current
+    const size = Math.ceil((piece.width + margin * 2) * scale)
+    const canvas = document.createElement('canvas')
+    canvas.width = size
+    canvas.height = size
+    const g = canvas.getContext('2d')
+    g.scale(scale, scale)
+    g.translate(margin, margin)
+    const path = new Path2D(piece.pathData || getPiecePath(piece, grid))
+    const src = piece.width + margin * 2
+
+    g.save()
+    g.clip(path)
+    g.drawImage(image, piece.targetX - margin, piece.targetY - margin, src, src, -margin, -margin, src, src)
+    // soft inner highlight + shade, for the cut-cardboard look
+    const w = Math.max(1.2 / scale, grid.cellSize * 0.018)
+    g.strokeStyle = 'rgba(255,255,255,0.5)'
+    g.lineWidth = w * 2.2
+    g.stroke(path)
+    g.save(); g.translate(w * 0.9, w * 0.9)
+    g.strokeStyle = 'rgba(20,40,70,0.22)'; g.lineWidth = w * 1.6; g.stroke(path)
+    g.restore()
+    g.restore()
+
+    g.strokeStyle = 'rgba(41,76,112,0.55)'
+    g.lineWidth = w
+    g.stroke(path)
+    return canvas
+  }
+
+  function paintPlaced(piece) {
+    const layer = placedLayerRef.current
+    const sprite = spritesRef.current.get(piece.id)
+    if (!layer || !sprite) return
+    const { margin, layerScale } = spriteInfoRef.current
+    const size = (piece.width + margin * 2) * layerScale
+    layer.getContext('2d').drawImage(sprite, (piece.targetX - margin) * layerScale, (piece.targetY - margin) * layerScale, size, size)
+  }
+
+  function rebuildPlacedLayer() {
+    const grid = gridRef.current
+    if (!grid) return
+    const { layerScale } = spriteInfoRef.current
+    let layer = placedLayerRef.current
+    if (!layer) {
+      layer = document.createElement('canvas')
+      layer.width = Math.ceil(grid.width * layerScale)
+      layer.height = Math.ceil(grid.height * layerScale)
+      placedLayerRef.current = layer
+    }
+    layer.getContext('2d').clearRect(0, 0, layer.width, layer.height)
+    paintedRef.current = new Set()
+    piecesRef.current.forEach((piece) => {
+      if (!piece.placed) return
+      paintPlaced(piece)
+      paintedRef.current.add(piece.id)
+    })
+  }
+
+  // call whenever a piece's `placed` flag may have changed
+  function syncPlaced(piece) {
+    markDirty()
+    const painted = paintedRef.current
+    if (piece.placed && !painted.has(piece.id)) { paintPlaced(piece); painted.add(piece.id) }
+    else if (!piece.placed && painted.has(piece.id)) rebuildPlacedLayer()
+  }
+
+  function flash(piece, now = Date.now()) {
+    piece.flashAt = now
+    flashingRef.current.add(piece)
   }
 
   function rebuildGroups() {
@@ -641,7 +764,7 @@ export default function PuzzleBoard({
     all.forEach((member) => {
       regroup(member, key)
       member.stackOrder = now
-      member.flashAt = now
+            flash(member, now)
     })
     return all
   }
@@ -699,6 +822,7 @@ export default function PuzzleBoard({
   }
 
   function grabPiece(piece, event, point) {
+    
     const world = screenToWorld(point, viewRef.current)
     const members = groupMembers(piece)
     const leader = members.reduce((a, b) => (a.id < b.id ? a : b))
@@ -726,6 +850,7 @@ export default function PuzzleBoard({
     members.forEach((member) => { member.stackOrder = stamp })
     selectedPieceRef.current = piece
     dragRef.current = drag
+    markDirty()
     onSound('pickup')
     drawRef.current?.()
 
@@ -755,7 +880,7 @@ export default function PuzzleBoard({
     drawRef.current?.()
     if (!drag.locked) return
     const now = Date.now()
-    if (now - lastWriteRef.current.at > 120 && !lastWriteRef.current.pending) {
+        if (now - lastWriteRef.current.at > (IS_TOUCH ? 220 : 120) && !lastWriteRef.current.pending) {
       lastWriteRef.current.at = now
       lastWriteRef.current.pending = roomControl.moveMany(drag.members.map((member) => ({ id: member.piece.id, x: member.piece.x, y: member.piece.y, rotation: member.piece.rotation || 0 })))
         .catch(() => { })
@@ -786,6 +911,7 @@ export default function PuzzleBoard({
     const drag = dragRef.current
     if (!drag || drag.kind !== 'piece') return
     const piece = drag.piece
+    markDirty()
     const members = drag.members.map((member) => member.piece)
     dragRef.current = null
     selectedPieceRef.current = null
@@ -801,11 +927,12 @@ export default function PuzzleBoard({
         member.y = member.targetY
         member.placed = true
         member.placedBy = user.uid
-        member.flashAt = now
+        flash(member, now)
       })
       onSound('correct')
     }
     members.forEach((member) => indexRef.current.update(member))
+    members.forEach(syncPlaced)
     drawRef.current?.()
 
     const locked = await drag.lock
@@ -816,13 +943,15 @@ export default function PuzzleBoard({
         member.piece.y = member.originalY
         indexRef.current.update(member.piece)
       })
+          drag.members.forEach((member) => syncPlaced(member.piece))
       drawRef.current?.()
       return
     }
-
+    
     if (!correct) {
       const joined = upright ? connectGroup(members) : null
       if (joined) {
+        markDirty()
         affected = joined
         onSound('connect')
 
@@ -1032,6 +1161,7 @@ export default function PuzzleBoard({
       const nextPiece = [...piecesRef.current.values()].find((candidate) => !candidate.placed)
       if (nextPiece && await roomControl.acquirePiece(nextPiece)) {
         selectedPieceRef.current = nextPiece
+        markDirty()
         nextPiece.stackOrder = Date.now()
         drawRef.current?.()
       }
@@ -1071,6 +1201,7 @@ export default function PuzzleBoard({
         piece.x = piece.targetX
         piece.y = piece.targetY
         piece.placed = true
+        syncPlaced(piece)
         piece.placedBy = user.uid
         onSound('correct')
       } else if (piece.x >= 0 && piece.y >= 0 && piece.x <= gridRef.current.width && piece.y <= gridRef.current.height) {
@@ -1078,6 +1209,7 @@ export default function PuzzleBoard({
       }
       await roomControl.release(piece.id, { x: piece.x, y: piece.y, placed: correct, rotation: piece.rotation || 0 })
       selectedPieceRef.current = null
+      markDirty()
       drawRef.current?.()
       return
     }
@@ -1088,10 +1220,12 @@ export default function PuzzleBoard({
       const held = drag ? drag.members.map((member) => member.piece) : [piece]
       await roomControl.releaseMany(held.map((member) => ({ id: member.id, x: member.x, y: member.y, placed: false, rotation: member.rotation || 0, group: member.group || member.id })))
       selectedPieceRef.current = null
+      markDirty()
       drawRef.current?.()
     }
   }
 
+  
   function changeZoom(nextZoom, anchor) {
     const canvas = canvasRef.current
     if (!canvas) return
