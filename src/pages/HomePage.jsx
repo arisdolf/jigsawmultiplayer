@@ -13,7 +13,7 @@ export default function HomePage({
   recentLevels = [],
   onPlay,
   onCreateRoom,
-  onJoinRoom,
+ onTogether,
   onBrowse,
   onRetry,
 }) {
@@ -67,14 +67,10 @@ export default function HomePage({
         </div>
       </section>
 
-      <section className="join-strip" aria-label="Join a room by code">
-        <div className="join-strip-copy"><span className="join-key-icon"><LockKeyhole size={17} /></span><div><strong>Someone saved you a seat?</strong><span>Pop in with their room code.</span></div></div>
-        <form className="join-code-form" onSubmit={(event) => { event.preventDefault(); onJoinRoom(event.currentTarget.elements.roomCode.value) }}>
-          <label className="sr-only" htmlFor="home-room-code">Room code</label>
-          <input id="home-room-code" name="roomCode" maxLength={6} pattern="[A-Za-z0-9]{6}" placeholder="ENTER CODE" autoCapitalize="characters" required />
-          <button type="submit" className="button button-dark">Join room <ArrowRight size={16} /></button>
-        </form>
-      </section>
+      <section className="join-strip" aria-label="Shared table">
+  <div className="join-strip-copy"><span className="join-key-icon"><UsersRound size={17} /></span><div><strong>Our table is always set</strong><span>A shared puzzle that saves and syncs for you both.</span></div></div>
+  <button type="button" className="button button-dark" onClick={onTogether}>Open our table <ArrowRight size={16} /></button>
+</section>
 
       {recentLevels.length > 1 && (
         <section className="recent-section" aria-labelledby="recent-title">

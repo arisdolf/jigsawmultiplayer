@@ -19,7 +19,9 @@ const LOCAL_ROOMS_KEY = 'jigsawmult-demo-rooms'
 const localCache = new Map()
 const channels = new Map()
 const localSubscribers = new Map()
-
+export const SHARED_ROOM_ID = import.meta.env.VITE_SHARED_ROOM_ID || 'our-table'
+const SHARED_MAX_PLAYERS = 2
+const SHARED_HISTORY_KEY = 'jigsawmult-demo-shared-history'
 function localRoomId() {
   return `local-${crypto.randomUUID()}`
 }
@@ -91,6 +93,119 @@ function makePlayer(user, displayName) {
   }
 }
 
+export async function enterSharedRoom({ user, displayName, levelId }) {
+  const id = SHARED_ROOM_ID
+  const now = Date.now()
+  const player = makePlayer(user, displayName)
+  const meta = {
+    roomCode: 'TOGETHER', hostId: user.uid, levelId, status: 'playing',
+    isPublic: false, permanent: true, createdAt: now, updatedAt: now, title: 'Our table',
+  }
+  const game = {
+    shared: true, levelId, status: 'playing', progress: 0, elapsedSeconds: 0,
+    startedAt: now, resumedAt: now, tickAt: now, pausedAt: null, completedAt: null,
+    sessionId: `${now}-${Math.random().toString(36).slice(2, 8)}`,
+  }
+  const live = ['playing', 'paused', 'completed']
+
+  if (!firebaseReady) {
+    const rooms = loadLocalRooms()
+    let room = latestStoredRoom(id) || rooms.get(id)
+    if (!room) room = { id, meta, players: {}, game, pieces: {}, pieceTargets: {}, chat: [] }
+    if (!live.includes(room.game?.status)) room.game = { ...game, levelId: room.meta?.levelId || levelId }
+    room.players[user.uid] = player
+    rooms.set(id, room)
+    persistLocalRooms()
+    publishLocal(id, { type: 'player', player })
+    return room
+  }
+
+  const metaRef = ref(database, `rooms/${id}/meta`)
+  const gameRef = ref(database, `rooms/${id}/game`)
+  const playerRef = ref(database, `rooms/${id}/players/${user.uid}`)
+  const [metaSnap, gameSnap, playersSnap] = await Promise.all([
+    get(metaRef), get(gameRef), get(ref(database, `rooms/${id}/players`)),
+  ])
+  const present = playersSnap.val() || {}
+  if (!present[user.uid] && Object.keys(present).length >= SHARED_MAX_PLAYERS) {
+    throw new Error('Both seats at this table are already taken.')
+  }
+  const existingMeta = metaSnap.val()
+  if (!existingMeta) await set(metaRef, meta)
+  if (!live.includes(gameSnap.val()?.status)) {
+    await update(gameRef, { ...game, levelId: existingMeta?.levelId || levelId })
+    await update(metaRef, { status: 'playing', updatedAt: now })
+  }
+  await set(playerRef, player)
+  await onDisconnect(playerRef).remove()
+  return { id, meta: existingMeta || meta, players: { [user.uid]: player }, game: {} }
+}
+
+// Counts play time only while someone has the puzzle open. Both clients may call
+// this; the transaction only applies it when ~10s have passed since the last tick.
+export async function tickSharedClock(roomId) {
+  const apply = (game) => {
+    const now = Date.now()
+    const gap = (now - (Number(game.tickAt) || now)) / 1000
+    if (game.status !== 'playing' || gap < 8) return null
+    return { ...game, elapsedSeconds: (Number(game.elapsedSeconds) || 0) + Math.round(Math.min(gap, 15)), tickAt: now }
+  }
+  if (firebaseReady) {
+    await runTransaction(ref(database, `rooms/${roomId}/game`), (current) => (current ? (apply(current) || undefined) : current))
+    return
+  }
+  const room = loadLocalRooms().get(roomId)
+  const next = room && apply(room.game)
+  if (!next) return
+  room.game = next
+  persistLocalRooms()
+  publishLocal(roomId, { type: 'game', game: room.game })
+}
+
+export async function recordSharedCompletion({ sessionId, level, players, totalTime, placedCount, contributionCounts = {} }) {
+  const id = sessionId || `s-${Date.now()}`
+  const record = {
+    id,
+    levelId: level.id,
+    levelTitle: level.title || '',
+    levelOrder: Number(level.order) || 0,
+    difficulty: level.difficulty || '',
+    description: level.description || '',
+    imageURL: level.imageURL || '',
+    imageAlt: level.imageAlt || '',
+    imageRotation: Number(level.imageRotation) || 0,
+    pieceCount: placedCount,
+    totalTime: Math.max(0, Math.floor(totalTime || 0)),
+    completedAt: Date.now(),
+    players: players.map((p) => ({
+      uid: p.uid, displayName: p.displayName || 'Puzzle Pal', color: p.color || null,
+      photoURL: p.photoURL || null, piecesPlaced: contributionCounts[p.uid] || 0,
+    })),
+  }
+  if (firebaseReady) {
+    // first writer wins, so both players saving the same finish is harmless
+    await runTransaction(ref(database, `rooms/${SHARED_ROOM_ID}/history/${id}`), (cur) => (cur == null ? record : undefined))
+    return { saved: true }
+  }
+  const saved = JSON.parse(localStorage.getItem(SHARED_HISTORY_KEY) || '[]')
+  if (!saved.some((r) => r.id === id)) {
+    saved.push(record)
+    localStorage.setItem(SHARED_HISTORY_KEY, JSON.stringify(saved.slice(-200)))
+  }
+  return { saved: true }
+}
+
+export async function getSharedHistory() {
+  let list = []
+  if (firebaseReady) {
+    const snap = await get(ref(database, `rooms/${SHARED_ROOM_ID}/history`))
+    list = snap.exists() ? Object.values(snap.val()) : []
+  } else {
+    try { list = JSON.parse(localStorage.getItem(SHARED_HISTORY_KEY) || '[]') } catch { /* ignore */ }
+  }
+  return list.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))
+}
+
 export async function createRoom({ user, displayName, levelId, isPublic = false }) {
   const id = firebaseReady ? push(ref(database, 'rooms')).key : localRoomId()
   const player = makePlayer(user, displayName)
@@ -159,15 +274,18 @@ export async function joinRoom({ code, user, displayName }) {
     return room
   }
 
-  const codeSnapshot = await get(ref(database, `roomCodes/${normalizedCode}`))
+    const codeSnapshot = await get(ref(database, `roomCodes/${normalizedCode}`))
   const id = codeSnapshot.val()
   if (!id) throw new Error('No room has that code.')
-    // check the room exists and has space (limit of 8 players)
+
+  // check the room exists, isn't finished, and has space (limit of 8 players)
   const [metaSnapshot, playersSnapshot] = await Promise.all([
     get(ref(database, `rooms/${id}/meta`)),
     get(ref(database, `rooms/${id}/players`)),
   ])
-  if (!metaSnapshot.val()) throw new Error('That room is no longer available.')
+  const meta = metaSnapshot.val()
+  if (!meta) throw new Error('That room is no longer available.')
+  if (meta.status === 'completed') throw new Error('That room is no longer available.')
   const current = playersSnapshot.val() || {}
   if (!current[user.uid] && Object.keys(current).length >= 8) throw new Error('This room is full.')
 
@@ -175,7 +293,7 @@ export async function joinRoom({ code, user, displayName }) {
   const playerRef = ref(database, `rooms/${id}/players/${user.uid}`)
   await set(playerRef, player)
   await onDisconnect(playerRef).remove()
-  return { id, meta: null, players: { [user.uid]: player }, game: {} }
+  return { id, meta, players: { [user.uid]: player }, game: {} }
 }
 
 export function subscribeRoom(roomId, onEvent) {
@@ -265,11 +383,13 @@ export async function setRoomStatus(roomId, status, user) {
     const gameRef = ref(database, `rooms/${roomId}/game`)
     const currentSnapshot = await get(gameRef)
     const current = currentSnapshot.val() || {}
+    if (status === 'completed' && current.status === 'completed') return   // both players may call this
     const elapsedBefore = Number(current.elapsedSeconds) || 0
     const activeSince = Number(current.resumedAt || current.startedAt) || now
-    const elapsedSeconds = status === 'paused' || status === 'completed'
-      ? elapsedBefore + Math.max(0, Math.floor((now - activeSince) / 1000))
-      : current.status === 'paused' ? elapsedBefore : 0
+    const elapsedSeconds = current.shared ? elapsedBefore
+  : status === 'paused' || status === 'completed'
+    ? elapsedBefore + Math.max(0, Math.floor((now - activeSince) / 1000))
+    : current.status === 'paused' ? elapsedBefore : 0
     const patch = {
       status,
       updatedAt: now,
@@ -278,6 +398,7 @@ export async function setRoomStatus(roomId, status, user) {
         startedAt: current.status === 'paused' ? current.startedAt : now,
         sessionId: current.status === 'paused' ? current.sessionId : `${now}-${Math.random().toString(36).slice(2, 8)}`,
         resumedAt: now,
+        tickAt: now,
         pausedAt: null,
         completedAt: null,
       } : {}),
@@ -319,9 +440,10 @@ export async function setRoomStatus(roomId, status, user) {
 }
 
 export async function initializePuzzle(roomId, pieces, user) {
-  if (!firebaseReady) {
+ if (!firebaseReady) {
     const room = loadLocalRooms().get(roomId)
     if (!room || room.meta.hostId !== user.uid) throw new Error('Only the room host can prepare the puzzle.')
+    if (Object.keys(room.pieces || {}).length === pieces.length) return // already seeded, keep progress
     room.pieces = Object.fromEntries(pieces.map((piece) => [piece.id, { ...piece, movingBy: null, placedBy: null }]))
     room.pieceTargets = Object.fromEntries(pieces.map((piece) => [piece.id, { x: piece.targetX, y: piece.targetY }]))
     room.game.pieceCount = pieces.length
@@ -331,6 +453,12 @@ export async function initializePuzzle(roomId, pieces, user) {
     return
   }
 
+  // already seeded? keep the saved progress
+  const existing = await get(ref(database, `rooms/${roomId}/pieces`))
+  const existingCount = existing.exists() ? Object.keys(existing.val()).length : 0
+  if (existingCount === pieces.length) return
+  if (existingCount > 0) await remove(ref(database, `rooms/${roomId}/pieces`)) // wrong size, start clean
+  
   const patch = {}
   for (const piece of pieces) {
     patch[`rooms/${roomId}/pieces/${piece.id}`] = {
@@ -356,6 +484,8 @@ export async function resetRoomPuzzle(roomId, levelId, user) {
   if (firebaseReady) {
     const metaSnapshot = await get(ref(database, `rooms/${roomId}/meta`))
     if (metaSnapshot.val()?.hostId !== user.uid) throw new Error('Only the room host can reset the puzzle.')
+      const meta = metaSnapshot.val()
+if (!meta?.permanent && meta?.hostId !== user.uid) throw new Error('Only the room host can reset the puzzle.')
     await Promise.all([
       remove(ref(database, `rooms/${roomId}/pieces`)),
       remove(ref(database, `rooms/${roomId}/pieceTargets`)),
@@ -371,6 +501,7 @@ export async function resetRoomPuzzle(roomId, levelId, user) {
 
   const room = loadLocalRooms().get(roomId)
   if (!room || room.meta.hostId !== user.uid) throw new Error('Only the room host can reset the puzzle.')
+  if (!room || (!room.meta.permanent && room.meta.hostId !== user.uid)) throw new Error('Only the room host can reset the puzzle.')
   room.pieces = {}
   room.pieceTargets = {}
   Object.assign(room.meta, { levelId, status: 'waiting', updatedAt: Date.now() })

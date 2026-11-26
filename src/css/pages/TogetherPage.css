@@ -1,0 +1,39 @@
+.together-page { padding-bottom: 40px; }
+.together-heading { padding: 29px 0 22px; }
+.together-heading h1 { margin: 0; color: var(--blue-deep); font: 500 clamp(36px,5vw,50px)/1.05 var(--serif); letter-spacing: -1.7px; }
+.together-heading p:last-child { max-width: 480px; margin: 12px 0 0; color: #8192a0; font-size: 13px; line-height: 1.6; }
+.together-table { display: grid; grid-template-columns: minmax(0,1.1fr) minmax(0,1fr); gap: 22px; padding: 16px; border: 1px solid #e0e7ed; border-radius: 20px; background: rgba(250,252,255,.88); box-shadow: 0 14px 30px rgba(41,76,112,.07); }
+.together-table .recent-thumb, .together-skeleton { height: 280px; border-radius: 14px; }
+.together-skeleton { background: linear-gradient(100deg,#edf2f6 25%,#f7f9fb 38%,#edf2f6 62%); background-size: 400% 100%; animation: shimmer 1.6s ease infinite; }
+.together-table-body { display: flex; flex-direction: column; justify-content: center; gap: 10px; padding: 6px 6px 6px 0; }
+.together-table-body h2 { margin: 0; color: var(--blue-deep); font: 500 30px/1.1 var(--serif); }
+.together-meta { margin: 0; color: #8495a3; font-size: 12px; }
+.together-progress { height: 6px; overflow: hidden; border-radius: 6px; background: #e7edf1; }
+.together-progress i { display: block; height: 100%; background: linear-gradient(90deg,#6d95b6,#9eb7c7); transition: width .4s ease; }
+.together-stats { display: flex; flex-wrap: wrap; gap: 16px; color: #778c9d; font-size: 12px; }
+.together-stats span { display: inline-flex; align-items: center; gap: 5px; }
+.together-stats strong { color: var(--blue); font: 500 16px var(--serif); }
+.together-here { display: flex; align-items: center; gap: 10px; color: #6f8291; font-size: 12px; }
+.together-avatars { display: inline-flex; }
+.together-note { margin: 0; color: #8a9aa8; font-size: 12px; line-height: 1.55; }
+.together-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.together-saves { padding-top: 38px; }
+.together-count { display: inline-flex; align-items: center; gap: 5px; color: #bf8879; font-size: 12px; }
+.together-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+.together-empty { padding: 28px; border: 1px dashed #cddae4; border-radius: 16px; color: #778b9d; font-size: 13px; text-align: center; }
+.together-detail-modal .recent-thumb { height: 200px; border-radius: 14px; }
+.together-detail-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
+.together-detail-list div { padding: 10px; border: 1px solid #edf1f3; border-radius: 12px; }
+.together-detail-list dt { color: #93a1ad; font-size: 11px; }
+.together-detail-list dd { margin: 3px 0 0; color: #49677e; font: 500 16px var(--serif); }
+.together-people { display: flex; flex-direction: column; gap: 8px; padding: 0; margin: 8px 0 0; list-style: none; }
+.together-people li { display: flex; align-items: center; gap: 9px; padding: 8px; border: 1px solid #edf1f3; border-radius: 12px; font-size: 13px; }
+.together-people li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.together-people li strong { color: #84948f; font-size: 12px; }
+.together-pick { display: flex; flex-direction: column; gap: 6px; color: #637d91; font-size: 12px; font-weight: 700; }
+.together-pick select { min-height: 44px; border: 1px solid #dce5ec; border-radius: 11px; padding: 0 11px; background: white; font-size: 14px; }
+@media (max-width: 760px) {
+  .together-table { grid-template-columns: 1fr; }
+  .together-table .recent-thumb, .together-skeleton { height: 220px; }
+  .together-table-body { padding: 0 4px 6px; }
+}

@@ -14,11 +14,15 @@ import {
   subscribeRoom,
   updateRoomSettings,
   movePieces,
-  releasePieces
+  releasePieces,
+  enterSharedRoom, 
+  recordSharedCompletion, 
+  tickSharedClock
 } from '../services/roomService'
 import { playSound } from '../services/audioManager'
 
 const emptyRoom = { id: null, meta: null, players: [], game: {}, chat: [] }
+
 
 export function useRoom(roomId, user) {
   const [room, setRoom] = useState(emptyRoom)
@@ -26,18 +30,20 @@ export function useRoom(roomId, user) {
   const [activities, setActivities] = useState([])
   const piecesRef = useRef({})
   const pieceListeners = useRef(new Set())
-
+const enterShared = useCallback((options) => enterSharedRoom({ ...options, user: options.user || user }), [user])
+const completeShared = useCallback((details) => recordSharedCompletion(details), [])
+const tickClock = useCallback(() => tickSharedClock(roomId), [roomId])
   useEffect(() => {
-    if (!roomId) {
-      setRoom(emptyRoom)
-      piecesRef.current = {}
-      setPlacedCount(0)
-      setActivities([])
-      return undefined
-    }
+     // always wipe the previous room's data first
+  setRoom(emptyRoom)
+  piecesRef.current = {}
+  setPlacedCount(0)
+  setActivities([])
+
+  if (!roomId) return undefined
 
     let previousPlayerIds = new Set()
-    const unsubscribe = subscribeRoom(roomId, (event) => {
+  const unsubscribe = subscribeRoom(roomId, (event) => {
       if (event.type === 'snapshot') {
         const snapshot = event.room
         piecesRef.current = snapshot.pieces || {}
@@ -147,6 +153,7 @@ export function useRoom(roomId, user) {
     complete,
     moveMany,
     releaseMany,
+    enterShared, completeShared, tickClock,
   }
 }
 

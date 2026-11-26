@@ -26,13 +26,13 @@ function clockTime(totalSeconds) {
 function currentElapsed(game) {
   const saved = Number(game.elapsedSeconds) || 0
   if (game.status !== 'playing') return saved
+  if (game.shared) return saved + Math.min(15, Math.max(0, Math.floor((Date.now() - (Number(game.tickAt) || Date.now())) / 1000)))
   const started = Number(game.resumedAt || game.startedAt) || Date.now()
   return saved + Math.max(0, Math.floor((Date.now() - started) / 1000))
 }
-
-export default function GamePage({ roomControl, level, user, audio, onLeave, onBackToRoom, onShare, onNextLevel, onCompletionSaved }) {
+export default function GamePage({ roomControl, level, user, audio, onLeave, onBackToRoom, onShare, onNextLevel, onCompletionSaved, shared = false }) {
   const { room, placedCount, activities, piecesRef } = roomControl
-  const host = room.meta?.hostId === user?.uid
+  const host = shared || room.meta?.hostId === user?.uid
   const status = room.game.status || room.meta?.status || 'waiting'
   const [referenceVisible, setReferenceVisible] = useState(false)
   const [boardReady, setBoardReady] = useState(false)
@@ -44,13 +44,12 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
   const [earnedAchievements, setEarnedAchievements] = useState([])
   const [completionAttempt, setCompletionAttempt] = useState(0)
   const [completionError, setCompletionError] = useState('')
-  const [copied, setCopied] = useState(false)
-  const [codeCopied, setCodeCopied] = useState(false)
+
   const [actualPieces, setActualPieces] = useState(0)
   const totalPieces = actualPieces || Number(level?.pieceCount || 0)
   const [chatOpen, setChatOpen] = useState(false)
   const [trayOpen, setTrayOpen] = useState(false)
-   const pageRef = useRef(null)
+  const pageRef = useRef(null)
   const nativeFsRef = useRef(false)
   const [fullscreen, setFullscreen] = useState(false)
   const completionKey = `${room.id || ''}:${room.game.sessionId || ''}`
@@ -66,6 +65,11 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
   }, [isComplete])
   const celebrate = isComplete && !skipCelebration
   const showCompletion = isComplete && (skipCelebration || celebrationDone)
+  useEffect(() => {
+    if (!shared || status !== 'playing' || isComplete) return undefined
+    const timer = window.setInterval(() => roomControl.tickClock().catch(() => { }), 5000)
+    return () => window.clearInterval(timer)
+  }, [shared, status, isComplete, roomControl.tickClock])
   const contributionCounts = useMemo(() => {
     const counts = {}
     Object.values(piecesRef.current).forEach((piece) => {
@@ -119,7 +123,7 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
     setFullscreen(false)
     nativeFsRef.current = false
     try { window.screen.orientation?.unlock?.() } catch { /* ignore */ }
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => { })
   }
 
   // user leaves native full screen with the system gesture / back button
@@ -146,38 +150,31 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
 
   useEffect(() => () => {
     try { window.screen.orientation?.unlock?.() } catch { /* ignore */ }
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => { })
   }, [])
 
   useEffect(() => {
-  if (!level || !totalPieces || placedCount < totalPieces || completionHandled.current === completionKey) return
-  if (!host && status !== 'completed') return // wait for the host to lock in the final time
-  completionHandled.current = completionKey
-  async function finish() {
-    try {
-      setSavingCompletion(true)
-      setCompletionError('')
-      if (host && status !== 'completed') await roomControl.controlStatus('completed')
-      audio.playSound('complete')
-      const result = await roomControl.complete({
-        uid: user.uid,
-        sessionId: room.game.sessionId,
-        levelId: level.id,
-        players: room.players,
-        totalTime: elapsed,
-        placedCount: totalPieces,
-        contributionCounts,
-      })
-      setEarnedAchievements(result?.achievements || [])
-      await onCompletionSaved?.()
-    } catch (error) {
-      setCompletionError(error.message || 'Could not save the completion record.')
-    } finally {
-      setSavingCompletion(false)
+    if (!level || !totalPieces || placedCount < totalPieces || completionHandled.current === completionKey) return
+    if (!host && status !== 'completed') return // wait for the host to lock in the final time
+    completionHandled.current = completionKey
+    async function finish() {
+      try {
+        setSavingCompletion(true)
+        setCompletionError('')
+        if (host && status !== 'completed') await roomControl.controlStatus('completed')
+        audio.playSound('complete')
+        const result = shared
+          ? await roomControl.completeShared({ sessionId: room.game.sessionId, level, players: contributors, totalTime: elapsed, placedCount: totalPieces, contributionCounts })
+          : await roomControl.complete({ uid: user.uid, sessionId: room.game.sessionId, levelId: level.id, players: room.players, totalTime: elapsed, placedCount: totalPieces, contributionCounts })
+        setEarnedAchievements(result?.achievements || [])
+        if (!shared) await onCompletionSaved?.()
+        setCompletionError(error.message || 'Could not save the completion record.')
+      } finally {
+        setSavingCompletion(false)
+      }
     }
-  }
-  void finish()
-}, [host, level, placedCount, completionKey, status, roomControl.controlStatus, roomControl.complete, room.players, room.game.sessionId, elapsed, contributionCounts, audio.playSound, onCompletionSaved, completionAttempt, user?.uid, totalPieces])
+    void finish()
+  }, [host, level,shared, contributors, placedCount, completionKey, status, roomControl.controlStatus, roomControl.complete, room.players, room.game.sessionId, elapsed, contributionCounts, audio.playSound, onCompletionSaved, completionAttempt, user?.uid, totalPieces])
 
   const handleReadyChange = useCallback((ready) => setBoardReady(ready), [])
 
@@ -203,22 +200,9 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
     }
   }
 
-  async function copyInvite() {
-    const shared = await onShare()
-    if (!shared) return
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1800)
-  }
+  
 
-  async function copyRoomCode() {
-    try {
-      await navigator.clipboard.writeText(room.meta?.roomCode || '')
-      setCodeCopied(true)
-      window.setTimeout(() => setCodeCopied(false), 1800)
-    } catch {
-      setCodeCopied(false)
-    }
-  }
+  
 
   const activitiesWithNames = activities.map((activity) => ({
     ...activity,
@@ -226,10 +210,10 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
   }))
 
   return (
-        <main className={`game-page ${fullscreen ? 'is-fullscreen' : ''}`} ref={pageRef}>
+    <main className={`game-page ${fullscreen ? 'is-fullscreen' : ''}`} ref={pageRef}>
       <header className="game-heading">
-        <div className="game-heading-main"><div className="game-puzzle-thumbnail"><img src={level?.imageURL} alt="" /></div><div><p className="section-eyebrow">LEVEL {String(level?.order || 1).padStart(2, '0')} · {level?.difficulty}</p><h1>{level?.title || 'Shared puzzle'}</h1><div className="game-room-line"><button type="button" className="game-room-code" onClick={copyRoomCode} aria-label={`Copy room code ${room.meta?.roomCode}`}><span className="live-dot" />{codeCopied ? 'COPIED' : `ROOM ${room.meta?.roomCode}`}<Clipboard size={13} /></button><span>·</span><span>{room.players.length} playing</span></div></div></div>
-        <div className="game-players-row" aria-label="Players in this room">{room.players.slice(0, 6).map((player) => <Avatar key={player.uid} player={player} size="md" isHost={room.meta.hostId === player.uid} />)}{room.players.length > 6 && <span className="avatar-overflow">+{room.players.length - 6}</span>}<button type="button" className="game-invite-button" onClick={copyInvite}><Share2 size={15} /> {copied ? 'Copied' : 'Invite'}</button></div>
+        <div className="game-heading-main"><div className="game-puzzle-thumbnail"><img src={level?.imageURL} alt="" /></div><div><p className="section-eyebrow">LEVEL {String(level?.order || 1).padStart(2, '0')} · {level?.difficulty}</p><h1>{level?.title || 'Shared puzzle'}</h1><div className="game-room-line"><span className="live-dot" /><span>{shared ? 'Our table' : 'Solo table'} · {room.players.length} playing</span></div></div></div>
+        <div className="game-players-row" aria-label="Players in this room">{room.players.slice(0, 6).map((player) => <Avatar key={player.uid} player={player} size="md" isHost={room.meta.hostId === player.uid} />)}{room.players.length > 6 && <span className="avatar-overflow">+{room.players.length - 6}</span>}</div>
       </header>
 
       <div className="game-stat-strip">
@@ -244,7 +228,7 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
           <div className="board-toolbar"><div className="board-toolbar-note"><span className="board-spark"><Sparkles size={15} /></span><span>{status === 'paused' ? 'The table is paused for a moment.' : 'A little more fits every time you look.'}</span></div><div className="board-toolbar-actions">
             <button type="button" className={`board-tool ${referenceVisible ? 'active' : ''}`} aria-pressed={referenceVisible} onClick={() => setReferenceVisible((value) => !value)}><Image size={16} /> Reference</button>
             <button type="button" className={`board-tool board-chat-toggle ${chatOpen ? 'active' : ''}`} aria-expanded={chatOpen} onClick={() => setChatOpen((open) => !open)}><MessageCircle size={16} /> Chat</button>
-                        <button type="button" className="board-tool" onClick={fullscreen ? exitFullscreen : enterFullscreen}>{fullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />} {fullscreen ? 'Exit full screen' : 'Full screen'}</button>
+            <button type="button" className="board-tool" onClick={fullscreen ? exitFullscreen : enterFullscreen}>{fullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />} {fullscreen ? 'Exit full screen' : 'Full screen'}</button>
             {level?.allowRotation && <span className="rotation-hint"><RotateCw size={14} /> Rotate pieces</span>}
             {host && status !== 'completed' && <button type="button" className="board-tool" onClick={togglePause} disabled={!boardReady}>{status === 'paused' ? <Play size={16} /> : <Pause size={16} />}{status === 'paused' ? 'Resume' : 'Pause'}</button>}
             {host && status === 'completed' && <button type="button" className="board-tool" onClick={() => setConfirmRestart(true)}><RotateCw size={16} /> Start again</button>}
@@ -252,7 +236,7 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
           </div></div>
           <div className={`board-frame ${status === 'paused' ? 'board-paused' : ''} ${fullscreen ? 'is-fullscreen' : ''}`}>
             {currentLevel && <PuzzleBoard
-            fullscreen={fullscreen}
+              fullscreen={fullscreen}
               level={currentLevel}
               celebrate={celebrate}
               onCelebrationEnd={() => setCelebrationDone(true)}
@@ -269,7 +253,7 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
               onReadyChange={handleReadyChange}
               onSound={audio.playSound}
             />}
-                        {fullscreen && <div className="fs-hud">
+            {fullscreen && <div className="fs-hud">
               <button type="button" className="fs-btn" onClick={exitFullscreen} aria-label="Exit full screen"><Minimize2 size={18} /></button>
               <div className="fs-pill"><strong>{progress}%</strong><span>{clockTime(elapsed)}</span></div>
               <button type="button" className={`fs-btn ${referenceVisible ? 'is-on' : ''}`} onClick={() => setReferenceVisible((v) => !v)} aria-label="Toggle reference image"><Image size={18} /></button>
@@ -301,7 +285,7 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
         <div className="completion-contributors"><div className="completion-contributors-heading"><Sparkles size={15} /><strong>Everybody brought something</strong></div><div className="contributor-list">{contributors.map((player) => <div key={player.uid}><Avatar player={player} size="sm" /><span>{player.displayName}</span><strong>{player.piecesPlaced.toLocaleString()} pieces</strong></div>)}</div></div>
         {earnedAchievements.length > 0 && <div className="earned-achievement"><Trophy size={16} /><span><small>Achievement earned</small><strong>{earnedAchievements.map((id) => achievementNames[id] || id).join(' · ')}</strong></span></div>}
         {savingCompletion && <p className="completion-saving" role="status">Saving this little win…</p>}
-        {completionError && <div><p className="form-error" role="alert">{completionError}</p>{ <button type="button" className="text-action" disabled={savingCompletion} onClick={() => { completionHandled.current = ''; setCompletionAttempt((value) => value + 1) }}>Try saving again</button>}</div>}
+        {completionError && <div><p className="form-error" role="alert">{completionError}</p>{<button type="button" className="text-action" disabled={savingCompletion} onClick={() => { completionHandled.current = ''; setCompletionAttempt((value) => value + 1) }}>Try saving again</button>}</div>}
         <div className="completion-actions">
           <button type="button" className="button button-primary" onClick={onNextLevel} disabled={!host || !onNextLevel}><Sparkles size={16} /> Next level</button>
           <button type="button" className="button button-outline" onClick={restartPuzzle} disabled={!host} title={host ? undefined : 'Only the host can restart'}><RotateCw size={16} /> Play again</button>

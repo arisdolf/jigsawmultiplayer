@@ -1,4 +1,4 @@
-﻿import { ArrowLeft, AudioLines, Home, LogOut, Music2, Puzzle, Settings2, ShieldCheck, Sparkles, UserRound, UsersRound, Volume2, VolumeX } from 'lucide-react'
+﻿import { ArrowLeft, AudioLines, Home, Heart, LogOut, Music2, Puzzle, Settings2, ShieldCheck, Sparkles, UserRound, UsersRound, Volume2, VolumeX } from 'lucide-react'
 import Avatar from './Avatar'
 import '../css/components/TopBar.css'
 import '../css/components/TopBar.mobile.css'
@@ -6,12 +6,12 @@ import '../css/components/TopBar.mobile.css'
 const links = [
   { id: 'home', label: 'Home', icon: Sparkles },
   { id: 'levels', label: 'Puzzle library', icon: Puzzle },
-  { id: 'rooms', label: 'Find a room', icon: AudioLines },
+    { id: 'together', label: 'Together', icon: Heart },
 ]
 const mobileLinks = [
   { id: 'home', label: 'Home', icon: Home },
   { id: 'levels', label: 'Play', icon: Puzzle },
-  { id: 'rooms', label: 'Rooms', icon: UsersRound },
+  { id: 'together', label: 'Together', icon: UsersRound },
   { id: 'profile', label: 'Profile', icon: UserRound },
 ]
 
