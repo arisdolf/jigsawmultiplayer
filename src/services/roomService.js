@@ -12,7 +12,7 @@ import {
   set,
   update,
 } from 'firebase/database'
-import { collection, getDocs } from 'firebase/firestore'
+import { collection, doc, getDocs, setDoc } from 'firebase/firestore'
 import { callFirebaseFunction, database, firebaseReady, firestore } from './firebase'
 
 const LOCAL_ROOMS_KEY = 'jigsawmult-demo-rooms'
@@ -162,12 +162,19 @@ export async function joinRoom({ code, user, displayName }) {
   const codeSnapshot = await get(ref(database, `roomCodes/${normalizedCode}`))
   const id = codeSnapshot.val()
   if (!id) throw new Error('No room has that code.')
-  const { player } = await callFirebaseFunction('joinRoom', {
-    roomId: id,
-    code: normalizedCode,
-    displayName,
-  })
-  await onDisconnect(ref(database, `rooms/${id}/players/${user.uid}`)).remove()
+    // check the room exists and has space (limit of 8 players)
+  const [metaSnapshot, playersSnapshot] = await Promise.all([
+    get(ref(database, `rooms/${id}/meta`)),
+    get(ref(database, `rooms/${id}/players`)),
+  ])
+  if (!metaSnapshot.val()) throw new Error('That room is no longer available.')
+  const current = playersSnapshot.val() || {}
+  if (!current[user.uid] && Object.keys(current).length >= 8) throw new Error('This room is full.')
+
+  const player = makePlayer(user, displayName)
+  const playerRef = ref(database, `rooms/${id}/players/${user.uid}`)
+  await set(playerRef, player)
+  await onDisconnect(playerRef).remove()
   return { id, meta: null, players: { [user.uid]: player }, game: {} }
 }
 
@@ -212,13 +219,17 @@ export function subscribeRoom(roomId, onEvent) {
   const game = ref(database, `${roomPath}/game`)
   const pieces = ref(database, `${roomPath}/pieces`)
   const chat = ref(database, `${roomPath}/chat`)
+    
+    
 
   unsubscribers.push(onValue(base, (snapshot) => onEvent({ type: 'meta', meta: snapshot.val() })))
   unsubscribers.push(onChildAdded(players, (snapshot) => onEvent({ type: 'player', player: snapshot.val() })))
   unsubscribers.push(onChildChanged(players, (snapshot) => onEvent({ type: 'player', player: snapshot.val() })))
+    unsubscribers.push(onChildRemoved(pieces, (snapshot) => onEvent({ type: 'piece-removed', id: snapshot.key })))
   unsubscribers.push(onChildRemoved(players, (snapshot) => onEvent({ type: 'player-left', uid: snapshot.key })))
   unsubscribers.push(onValue(game, (snapshot) => onEvent({ type: 'game', game: snapshot.val() })))
   unsubscribers.push(onChildAdded(pieces, (snapshot) => onEvent({ type: 'piece', piece: { id: snapshot.key, ...snapshot.val() } })))
+  
   unsubscribers.push(onChildChanged(pieces, (snapshot) => onEvent({ type: 'piece', piece: { id: snapshot.key, ...snapshot.val() } })))
   unsubscribers.push(onChildAdded(chat, (snapshot) => onEvent({ type: 'message', message: { id: snapshot.key, ...snapshot.val() } })))
   return () => unsubscribers.forEach((unsubscribe) => unsubscribe())
@@ -326,7 +337,7 @@ export async function initializePuzzle(roomId, pieces, user) {
       x: piece.x,
       y: piece.y,
       placed: false,
-      rotation: 0,
+      rotation: piece.rotation || 0,
       movingBy: null,
       lockUntil: 0,
       placedBy: null,
@@ -393,6 +404,7 @@ export async function lockPiece(roomId, piece, user) {
 }
 
 export async function movePiece(roomId, pieceId, x, y, user) {
+  
   const patch = { x, y, lockUntil: Date.now() + 12000, updatedAt: Date.now() }
   if (!firebaseReady) {
     const room = loadLocalRooms().get(roomId)
@@ -486,7 +498,7 @@ export async function leaveRoom(roomId, user) {
   publishLocal(roomId, { type: 'player-left', uid: user.uid })
 }
 
-export async function recordCompletion({ roomId, levelId, players, totalTime, placedCount, contributionCounts = {}, uid }) {
+export async function recordCompletion({ roomId, sessionId, levelId, players, totalTime, placedCount, contributionCounts = {}, uid }) {
   const completion = {
     roomId,
     levelId,
@@ -496,32 +508,133 @@ export async function recordCompletion({ roomId, levelId, players, totalTime, pl
     placedCount,
     completedAt: Date.now(),
   }
+
   if (firestore) {
-    return callFirebaseFunction('recordPuzzleCompletion', { roomId, levelId })
-  } else {
-    const saved = JSON.parse(localStorage.getItem('jigsawmult-demo-completions') || '[]')
-    const previousForUser = saved.filter((record) => record.participants.includes(uid))
-    const alreadyEarned = new Set(previousForUser.flatMap((record) => record.achievements || []))
-    const candidates = []
-    if (!previousForUser.length) candidates.push('first-table')
-    if (players.length >= 8) candidates.push('full-table')
-    if (placedCount === 5000) candidates.push('master-table')
-    if ((contributionCounts[uid] || 0) >= 100) candidates.push('steady-hands')
-    const achievements = candidates.filter((id) => !alreadyEarned.has(id))
-    completion.achievements = achievements
-    saved.push({ id: crypto.randomUUID(), ...completion })
-    localStorage.setItem('jigsawmult-demo-completions', JSON.stringify(saved.slice(-200)))
-    return { saved: true, achievements }
+    try {
+      const docId = `${roomId}_${sessionId || 'session'}`
+      const previous = await getDocs(collection(firestore, 'users', uid, 'completions'))
+      const existing = previous.docs.find((entry) => entry.id === docId)
+      if (existing) return { saved: true, achievements: existing.data().achievements || [] } // already saved
+
+      const earned = new Set(previous.docs.flatMap((entry) => entry.data().achievements || []))
+      const candidates = []
+      if (previous.empty) candidates.push('first-table')
+      if (players.length >= 8) candidates.push('full-table')
+      if (placedCount === 5000) candidates.push('master-table')
+      if ((contributionCounts[uid] || 0) >= 100) candidates.push('steady-hands')
+      const achievements = candidates.filter((id) => !earned.has(id))
+
+      await setDoc(doc(firestore, 'users', uid, 'completions', docId), {
+        ...completion,
+        sessionId: sessionId || null,
+        piecesPlaced: contributionCounts[uid] || 0,
+        achievements,
+      })
+      return { saved: true, achievements }
+    } catch (error) {
+      console.warn('Cloud completion save failed, saving on this device instead:', error)
+    }
   }
+
+
+  const saved = JSON.parse(localStorage.getItem('jigsawmult-demo-completions') || '[]')
+  const previousForUser = saved.filter((record) => record.participants.includes(uid))
+  const alreadyEarned = new Set(previousForUser.flatMap((record) => record.achievements || []))
+  const candidates = []
+  if (!previousForUser.length) candidates.push('first-table')
+  if (players.length >= 8) candidates.push('full-table')
+  if (placedCount === 5000) candidates.push('master-table')
+  if ((contributionCounts[uid] || 0) >= 100) candidates.push('steady-hands')
+  const achievements = candidates.filter((id) => !alreadyEarned.has(id))
+  completion.achievements = achievements
+  saved.push({ id: crypto.randomUUID(), ...completion })
+  localStorage.setItem('jigsawmult-demo-completions', JSON.stringify(saved.slice(-200)))
+  return { saved: true, achievements }
 }
 
 export async function getUserCompletions(uid) {
   if (!uid) return []
+  let cloud = []
   if (firestore) {
-    const snapshot = await getDocs(collection(firestore, 'users', uid, 'completions'))
-    return snapshot.docs.map((completion) => ({ id: completion.id, ...completion.data() }))
+    try {
+      const snapshot = await getDocs(collection(firestore, 'users', uid, 'completions'))
+      cloud = snapshot.docs.map((completion) => ({ id: completion.id, ...completion.data() }))
+    } catch {
+      // fall back to the records saved on this device
+    }
   }
-  const saved = JSON.parse(localStorage.getItem('jigsawmult-demo-completions') || '[]')
-  return saved.filter((completion) => completion.participants.includes(uid))
+  let local = []
+  try {
+    const saved = JSON.parse(localStorage.getItem('jigsawmult-demo-completions') || '[]')
+    local = saved.filter((completion) => completion.participants?.includes(uid))
+  } catch {
+    // ignore unreadable local data
+  }
+  return [...cloud, ...local]
 }
 
+
+export async function movePieces(roomId, items, user) {
+  const now = Date.now()
+  if (!firebaseReady) {
+    const room = loadLocalRooms().get(roomId)
+    if (!room) return
+    items.forEach(({ id, x, y, rotation }) => {
+      const current = room.pieces[id]
+      if (!current) return
+            Object.assign(current, { x, y, rotation: Number(rotation) || 0, movingBy: user.uid, lockUntil: now + 12000, updatedAt: now })
+      publishLocal(roomId, { type: 'piece', piece: { id, ...current } })
+    })
+    return
+  }
+  const patch = {}
+  items.forEach(({ id, x, y, rotation }) => {
+    const base = `rooms/${roomId}/pieces/${id}`
+    patch[`${base}/x`] = x
+    patch[`${base}/y`] = y
+        patch[`${base}/rotation`] = Number(rotation) || 0
+    patch[`${base}/movingBy`] = user.uid
+    patch[`${base}/lockUntil`] = now + 12000
+    patch[`${base}/updatedAt`] = now
+  })
+  await update(ref(database), patch)
+}
+
+export async function releasePieces(roomId, items, user) {
+  const now = Date.now()
+  const build = ({ x, y, placed, rotation = 0, group }) => ({
+    x,
+    y,
+    placed: Boolean(placed),
+    rotation: Number(rotation) || 0,
+    placedBy: placed ? user.uid : null,
+    placedByName: placed ? (user.displayName || 'Puzzle Pal') : null,
+    movingBy: null,
+    lockUntil: 0,
+    updatedAt: now,
+    ...(group ? { group } : {}),
+  })
+
+  if (!firebaseReady) {
+    const room = loadLocalRooms().get(roomId)
+    if (!room) return
+    items.forEach((item) => {
+      const current = room.pieces[item.id]
+      if (!current) return
+      Object.assign(current, build(item))
+      publishLocal(roomId, { type: 'piece', piece: { id: item.id, ...current } })
+    })
+    room.game.progress = Object.values(room.pieces).filter((piece) => piece.placed).length
+    persistLocalRooms()
+    publishLocal(roomId, { type: 'game', game: room.game })
+    return
+  }
+
+  const patch = {}
+  items.forEach((item) => {
+    Object.entries(build(item)).forEach(([key, value]) => {
+      patch[`rooms/${roomId}/pieces/${item.id}/${key}`] = value
+    })
+  })
+  await update(ref(database), patch)
+}

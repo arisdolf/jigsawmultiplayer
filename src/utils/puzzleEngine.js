@@ -22,14 +22,20 @@ function hash32(value) {
 }
 
 function getGrid(pieceCount, imageAspect = 1.5) {
-  const targetAspect = clamp(Number(imageAspect) || 1.5, 0.55, 2.4)
-  let best = { rows: pieceCount, columns: 1, distance: Infinity }
-  for (let columns = 1; columns <= pieceCount; columns += 1) {
-    const rows = Math.ceil(pieceCount / columns)
-    const distance = Math.abs(Math.log(columns / rows / targetAspect))
-    if (distance < best.distance) best = { rows, columns, distance }
+  const target = clamp(Number(imageAspect) || 1.5, 0.55, 2.4)
+  const accept = Math.log(1.6) // accept a grid up to 60% off the picture's shape (the picture is cropped to fit)
+  const maxTotal = Math.ceil(pieceCount * 1.15) + 2
+  let best = null
+  for (let total = pieceCount; total <= maxTotal; total += 1) {
+    for (let columns = 1; columns <= total; columns += 1) {
+      if (total % columns) continue
+      const rows = total / columns
+      const distance = Math.abs(Math.log(columns / rows / target))
+      if (!best || distance < best.distance) best = { rows, columns, count: total, distance }
+    }
+    if (best.distance <= accept) break
   }
-  return { rows: best.rows, columns: best.columns }
+  return best
 }
 
 // Deterministic per level (seed = level id) so every player in the room
@@ -127,20 +133,46 @@ export function getPiecePath(piece, grid) {
   ].join(' ')
 }
 
+// Free spots in a ring around the board where loose pieces can start
+function scatterSlots(grid, band, step, jitter) {
+  const pad = jitter + grid.cellSize * 0.25
+  const columns = Math.floor((grid.width + band * 2) / step)
+  const rows = Math.floor((grid.height + band * 2) / step)
+  const slots = []
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const x = -band + column * step
+      const y = -band + row * step
+      const touchesBoard = x < grid.width + pad && x + step > -pad && y < grid.height + pad && y + step > -pad
+      if (!touchesBoard) slots.push({ x, y })
+    }
+  }
+  return slots
+}
+
+function shuffle(list) {
+  for (let index = list.length - 1; index > 0; index -= 1) {
+    const swap = Math.floor(Math.random() * (index + 1))
+    ;[list[index], list[swap]] = [list[swap], list[index]]
+  }
+  return list
+}
+
 export async function generatePuzzlePieces({
   pieceCount,
   imageAspect = 1.5,
   boardWidth = 1800,
   seed = '',
+  shuffleRotation = false,
   onProgress = () => {},
   signal,
 }) {
-  const count = Number(pieceCount)
-  if (!Number.isInteger(count) || count < 1 || count > MAX_PIECES) {
+    const requested = Number(pieceCount)
+  if (!Number.isInteger(requested) || requested < 1 || requested > MAX_PIECES) {
     throw new RangeError(`Piece count must be an integer from 1 to ${MAX_PIECES}.`)
   }
 
-  const { rows, columns } = getGrid(count, imageAspect)
+  const { rows, columns, count } = getGrid(requested, imageAspect)
   const cellSize = clamp(boardWidth / columns, 24, 240)
   const grid = {
     rows,
@@ -150,18 +182,25 @@ export async function generatePuzzlePieces({
     height: rows * cellSize,
     count,
     seed: String(seed),
-    trayGap: Math.max(80, cellSize * 2.5),
   }
-  const trayColumns = Math.max(1, Math.ceil(Math.sqrt(count * clamp(imageAspect, 0.55, 2.4))))
+
+  // Size the scatter ring so there is a free spot for every piece
+  const step = cellSize
+  const jitter = step * 0.12
+  const sides = (grid.width + grid.height) / step
+  const estimate = (-2 * sides + Math.sqrt(4 * sides * sides + 16 * count * 1.15)) / 8
+  let band = Math.max(2.5, estimate) * step
+  let slots = scatterSlots(grid, band, step, jitter)
+  while (slots.length < count) {
+    band += step
+    slots = scatterSlots(grid, band, step, jitter)
+  }
+  grid.bounds = { x: -band, y: -band, width: grid.width + band * 2, height: grid.height + band * 2 }
+
+  shuffle(slots)
+  const stacking = shuffle(Array.from({ length: count }, (_, index) => index))
   const pieces = new Array(count)
   const batchSize = count > 1000 ? 180 : 500
-
-  // Fisher–Yates shuffle: every piece gets a random loose-pile slot
-  const slots = Array.from({ length: count }, (_, index) => index)
-  for (let index = count - 1; index > 0; index -= 1) {
-    const swap = Math.floor(Math.random() * (index + 1))
-    ;[slots[index], slots[swap]] = [slots[swap], slots[index]]
-  }
 
   for (let index = 0; index < count; index += 1) {
     if (signal?.aborted) throw new DOMException('Puzzle generation cancelled.', 'AbortError')
@@ -169,10 +208,6 @@ export async function generatePuzzlePieces({
     const row = Math.floor(index / columns)
     const column = index % columns
     const slot = slots[index]
-    const trayRow = Math.floor(slot / trayColumns)
-    const trayColumn = slot % trayColumns
-    const x = grid.width + grid.trayGap + trayColumn * cellSize + (Math.random() * 20 - 10)
-    const y = trayRow * cellSize + (Math.random() * 20 - 10)
 
     pieces[index] = {
       id: `${row}-${column}`,
@@ -182,14 +217,14 @@ export async function generatePuzzlePieces({
       height: cellSize,
       targetX: column * cellSize,
       targetY: row * cellSize,
-      x,
-      y,
+      x: slot.x + (Math.random() * 2 - 1) * jitter,
+      y: slot.y + (Math.random() * 2 - 1) * jitter,
       placed: false,
-      rotation: 0,
+      rotation: shuffleRotation ? [0, 90, 180, 270][Math.floor(Math.random() * 4)] : 0,
       movingBy: null,
       lockUntil: 0,
       style: 0,
-      stackOrder: slot, // random stacking + random order in the piece tray
+      stackOrder: stacking[index],
     }
 
     if ((index + 1) % batchSize === 0 && index + 1 < count) {
@@ -218,8 +253,8 @@ export function getPlacementTarget(piece) {
   return { x: piece.targetX, y: piece.targetY }
 }
 
-export function isCorrectPlacement(piece, x, y, zoom = 1) {
-  const tolerance = Math.max(7, Math.min(piece.width, piece.height) * 0.24 / zoom)
+export function isCorrectPlacement(piece, x, y) {
+  const tolerance = Math.min(piece.width, piece.height) * 0.1 // raise toward 0.2 for a stronger magnet
   return Math.hypot(x - piece.targetX, y - piece.targetY) <= tolerance
 }
 

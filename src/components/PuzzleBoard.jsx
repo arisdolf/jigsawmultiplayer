@@ -1,12 +1,16 @@
 ﻿import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, RotateCw } from 'lucide-react'
+import { RotateCw } from 'lucide-react'
 import { generatePuzzlePieces, getPiecePath, isCorrectPlacement } from '../utils/puzzleEngine'
 import { SpatialIndex } from '../utils/spatialIndex'
 import '../css/components/PuzzleBoard.css'
 
-const ZOOM_MIN = 0.18
+const ZOOM_MIN = 0.08
 const ZOOM_MAX = 2.5
 const PATH_CACHE_LIMIT = 600
+const NEIGHBORS = [[-1, 0], [1, 0], [0, -1], [0, 1]]
+const TAP_SLOP = 6
+const FADE_MS = 1800 // outlines fade from the centre out to the edges
+const ZOOM_MS = 1700 // board zooms in to fill the view
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 
 function normalizeImageRotation(value) {
@@ -46,20 +50,20 @@ export default function PuzzleBoard({
   resetToken = 0,
   disabled = false,
   referenceVisible,
-  trayOpen = false,
-  onTrayToggle,
   onGenerated,
   onReadyChange,
   onSound,
+  celebrate = false,
+  onCelebrationEnd,
 }) {
   const canvasRef = useRef(null)
-  const trayCanvasRef = useRef(null)
   const containerRef = useRef(null)
   const workerRef = useRef(null)
   const gridRef = useRef(null)
   const boardImageRef = useRef(null)
   const piecesRef = useRef(new Map())
   const pathCacheRef = useRef(new Map())
+  const groupsRef = useRef(new Map())
   const indexRef = useRef(null)
   const viewRef = useRef({ scale: 1, panX: 0, panY: 0 })
   const roomStatusRef = useRef(level.roomStatus)
@@ -67,21 +71,48 @@ export default function PuzzleBoard({
   const dragRef = useRef(null)
   const pointerPointsRef = useRef(new Map())
   const pinchRef = useRef(null)
+  const seedRef = useRef(null)
+  const seededRef = useRef(false)
   const lastTapRef = useRef(null)
+  const celebrationRef = useRef(null)
+  const renderRef = useRef(null)
+  const frameRef = useRef(0)
+  const [rising, setRising] = useState(false)
   const fitZoomRef = useRef(1)
-  const hoverBlockRef = useRef(null)
-  const pendingPointerRef = useRef(null)
+  const rafRef = useRef(0)
   const selectedPieceRef = useRef(null)
-  const trayPagePiecesRef = useRef([])
-  const trayPageCountRef = useRef(1)
-  const traySwipeStartRef = useRef(null)
-  const trayDrawRef = useRef(null)
   const lastWriteRef = useRef({ at: 0, pending: null })
+  const hitContextRef = useRef(null)
   const drawRef = useRef(null)
   const [generation, setGeneration] = useState({ progress: 0, ready: false, error: '' })
   const [zoom, setZoom] = useState(1)
-  const [trayPage, setTrayPage] = useState(0)
-  const [trayPages, setTrayPages] = useState(1)
+
+  useEffect(() => {
+    if (!celebrate || !generation.ready) { setRising(false); return undefined }
+    const canvas = canvasRef.current
+    const grid = gridRef.current
+    if (!canvas || !grid) return undefined
+    const width = canvas.clientWidth
+    const height = canvas.clientHeight
+    const scale = Math.min((width - 40) / grid.width, (height - 40) / grid.height)
+    celebrationRef.current = {
+      start: Date.now(),
+      from: { ...viewRef.current },
+      to: { scale, panX: (width - grid.width * scale) / 2, panY: (height - grid.height * scale) / 2 },
+    }
+    setRising(false)
+    drawRef.current?.()
+    const rise = window.setTimeout(() => setRising(true), FADE_MS + ZOOM_MS + 150)
+    const done = window.setTimeout(() => {
+      setZoom(viewRef.current.scale)
+      onCelebrationEnd?.()
+    }, FADE_MS + ZOOM_MS + 600)
+    return () => {
+      window.clearTimeout(rise)
+      window.clearTimeout(done)
+      celebrationRef.current = null
+    }
+  }, [celebrate, generation.ready])
 
   useEffect(() => {
     let cancelled = false
@@ -118,13 +149,14 @@ export default function PuzzleBoard({
               if (workerRef.current === worker) workerRef.current = null
               reject(error)
             }
-            worker.postMessage({ pieceCount: level.pieceCount, imageAspect, seed: level.id })
+            worker.postMessage({ pieceCount: level.pieceCount, imageAspect, seed: level.id, shuffleRotation: Boolean(level.allowRotation) })
           })
         } else {
           generated = await generatePuzzlePieces({
             pieceCount: level.pieceCount,
             imageAspect,
             seed: level.id,
+            shuffleRotation: Boolean(level.allowRotation),
             onProgress: (progress) => !cancelled && setGeneration((current) => ({ ...current, progress })),
           })
         }
@@ -137,7 +169,7 @@ export default function PuzzleBoard({
         pieces.forEach((piece) => {
           const remote = roomPieces[piece.id]
           const { pathData, ...pieceData } = piece
-          const fullPiece = {
+          pieceMap.set(piece.id, {
             ...pieceData,
             ...remote,
             id: piece.id,
@@ -148,14 +180,15 @@ export default function PuzzleBoard({
             targetX: piece.targetX,
             targetY: piece.targetY,
             pathData,
-
-          }
-          pieceMap.set(piece.id, fullPiece)
+            stackOrder: piece.stackOrder ?? piece.row * grid.columns + piece.column,
+            group: remote?.group || piece.id,
+          })
         })
 
         gridRef.current = grid
         boardImageRef.current = imageCanvas
         piecesRef.current = pieceMap
+        rebuildGroups()
         pathCacheRef.current.clear()
         indexRef.current = new SpatialIndex(grid.cellSize)
         pieceMap.forEach((piece) => indexRef.current.insert(piece))
@@ -164,14 +197,14 @@ export default function PuzzleBoard({
         onReadyChange(true)
         drawRef.current?.()
 
-        const isEmpty = Object.keys(roomPieces).length === 0
-        if (isHost && ((roomStatusRef.current === 'playing' && isEmpty) || resetToken > 0)) {
-          const seedPieces = pieces.map((piece) => {
-            const seed = { ...piece }
-            delete seed.pathData
-            return seed
-          })
-          await roomControl.prepare(seedPieces)
+        seedRef.current = pieces.map((piece) => {
+          const { pathData, ...rest } = piece
+          return rest
+        })
+        seededRef.current = false
+        if (isHost && resetToken > 0) {
+          seededRef.current = true
+          await roomControl.prepare(seedRef.current)
         }
       } catch (error) {
         if (error.name !== 'AbortError' && !cancelled) {
@@ -192,39 +225,89 @@ export default function PuzzleBoard({
     }
   }, [level.id, level.imageURL, level.imageRotation, level.pieceCount, resetToken, isHost, roomControl.prepare, roomControl.piecesRef, onGenerated, onReadyChange])
 
+  useEffect(() => {
+    if (!generation.ready || !isHost || level.roomStatus !== 'playing') return
+    if (!seedRef.current || seededRef.current) return
+    const remoteCount = Object.keys(roomControl.piecesRef.current).length
+    if (remoteCount === seedRef.current.length) return // already seeded correctly
+    seededRef.current = true
+    roomControl.prepare(seedRef.current).catch((error) => {
+      seededRef.current = false
+      console.error('Could not seed puzzle pieces', error)
+    })
+  }, [generation.ready, isHost, level.roomStatus, level.id, roomControl.prepare, roomControl.piecesRef])
+
   useEffect(() => roomControl.subscribePieces((event) => {
     if (event.type === 'reset') {
       if (!gridRef.current || !Object.keys(event.pieces).length) return
       const next = new Map(piecesRef.current)
       Object.entries(event.pieces).forEach(([id, remote]) => {
         const local = next.get(id)
-        if (local) next.set(id, { ...local, ...remote, id })
+        if (local) next.set(id, { ...local, movingBy: null, placedBy: null, placedByName: null, ...remote, id, group: remote.group || id })
       })
       piecesRef.current = next
+      rebuildGroups()
       indexRef.current = new SpatialIndex(gridRef.current.cellSize)
       next.forEach((piece) => indexRef.current.insert(piece))
       drawRef.current?.()
-      trayDrawRef.current?.()
       return
     }
     const local = piecesRef.current.get(event.piece.id)
     if (!local) return
-    const dragPiece = dragRef.current?.kind === 'piece' && dragRef.current.piece.id === event.piece.id
-      ? dragRef.current.piece
-      : null
-    const pendingPiece = pendingPointerRef.current?.piece.id === event.piece.id ? pendingPointerRef.current.piece : null
-    const preserveLocalPosition = event.piece.movingBy === user.uid && !event.piece.placed && (dragPiece || pendingPiece)
-    const grid = gridRef.current
-    const wasInTray = Boolean(grid && !local.placed && !local.movingBy && local.x > grid.width)
+    const drag = dragRef.current
+    const carried = drag?.kind === 'piece' && drag.members.some((member) => member.piece.id === event.piece.id)
     const x = local.x
     const y = local.y
-    Object.assign(local, event.piece)
-    if (preserveLocalPosition) { local.x = x; local.y = y }
+    const rotation = local.rotation
+    const wasPlaced = local.placed
+    const before = local.group || local.id
+    Object.assign(local, { movingBy: null, placedBy: null, placedByName: null }, event.piece)
+    const after = local.group || local.id
+    if (before !== after) { local.group = before; regroup(local, after) }
+    if (!wasPlaced && local.placed) local.flashAt = Date.now()
+    if (carried && event.piece.movingBy === user.uid && !event.piece.placed) { local.x = x; local.y = y; local.rotation = rotation }
     indexRef.current?.update(local)
     drawRef.current?.()
-    const isInTray = Boolean(grid && !local.placed && !local.movingBy && local.x > grid.width)
-    if (wasInTray !== isInTray) trayDrawRef.current?.()
   }), [roomControl.subscribePieces, user?.uid])
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return undefined
+    canvas.addEventListener('wheel', handleWheel, { passive: false })
+    return () => canvas.removeEventListener('wheel', handleWheel)
+  })
+
+  // keep the lock alive while a piece is being carried but not moved
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const drag = dragRef.current
+      if (drag?.kind === 'piece' && drag.locked) {
+        roomControl.moveMany(drag.members.map((member) => ({ id: member.piece.id, x: member.piece.x, y: member.piece.y, rotation: member.piece.rotation || 0 }))).catch(() => { })
+      }
+    }, 4000)
+    return () => window.clearInterval(timer)
+  }, [roomControl.moveMany])
+
+  function fitView(width, height) {
+    const grid = gridRef.current
+    if (!grid) return
+    const bounds = grid.bounds || { x: 0, y: 0, width: grid.width, height: grid.height }
+    const scale = clamp(Math.min((width - 24) / bounds.width, (height - 24) / bounds.height), ZOOM_MIN, 1.15)
+    fitZoomRef.current = scale
+    viewRef.current = {
+      scale,
+      panX: (width - bounds.width * scale) / 2 - bounds.x * scale,
+      panY: (height - bounds.height * scale) / 2 - bounds.y * scale,
+    }
+    setZoom(scale)
+  }
+
+  useEffect(() => () => {
+    cancelAnimationFrame(frameRef.current)
+    cancelAnimationFrame(rafRef.current)
+    frameRef.current = 0
+    rafRef.current = 0
+  }, [])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -233,25 +316,12 @@ export default function PuzzleBoard({
 
     const resize = () => {
       const rect = container.getBoundingClientRect()
-      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      const dpr = Math.min(window.devicePixelRatio || 1, 2) * ((gridRef.current?.count || 0) > 300 ? 0.75 : 1)
       canvas.width = Math.max(1, Math.round(rect.width * dpr))
       canvas.height = Math.max(1, Math.round(rect.height * dpr))
       canvas.style.width = `${rect.width}px`
       canvas.style.height = `${rect.height}px`
-      const grid = gridRef.current
-      if (grid) {
-        const mobile = window.matchMedia('(max-width: 760px)').matches
-        const fit = Math.min(
-          (rect.width - 44) / (mobile ? grid.width : grid.width + grid.trayGap + grid.cellSize * 5),
-          (rect.height - 50) / (mobile ? grid.height : Math.max(grid.height, grid.cellSize * 6)),
-        )
-        fitZoomRef.current = clamp(fit, ZOOM_MIN, 1.15)
-        viewRef.current.scale = fitZoomRef.current
-        viewRef.current.panX = Math.max(18, (rect.width - grid.width * viewRef.current.scale) / 2)
-        viewRef.current.panY = 38
-        setZoom(viewRef.current.scale)
-      }
-      trayDrawRef.current?.()
+      fitView(rect.width, rect.height)
       drawRef.current?.()
     }
 
@@ -261,77 +331,7 @@ export default function PuzzleBoard({
     return () => observer.disconnect()
   }, [generation.ready])
 
-  useEffect(() => { trayDrawRef.current?.() }, [trayOpen, trayPage])
-
-  trayDrawRef.current = () => {
-    const canvas = trayCanvasRef.current
-    const grid = gridRef.current
-    if (!canvas || !grid || !trayOpen) return
-    const rect = canvas.getBoundingClientRect()
-    if (rect.width < 1 || rect.height < 1) return
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    canvas.width = Math.max(1, Math.round(rect.width * dpr))
-    canvas.height = Math.max(1, Math.round(rect.height * dpr))
-    const context = canvas.getContext('2d')
-    context.setTransform(dpr, 0, 0, dpr, 0, 0)
-    context.clearRect(0, 0, rect.width, rect.height)
-    context.fillStyle = '#f3eee5'
-    context.fillRect(0, 0, rect.width, rect.height)
-
-    const loose = [...piecesRef.current.values()]
-      .filter((piece) => !piece.placed && !piece.movingBy && piece.x > grid.width)
-      .sort((a, b) => a.stackOrder - b.stackOrder)
-    const slots = Math.max(1, Math.floor((rect.width - 16) / 72))
-    const pageCount = Math.max(1, Math.ceil(loose.length / slots))
-    const page = Math.min(trayPage, pageCount - 1)
-    if (pageCount !== trayPageCountRef.current) setTrayPages(pageCount)
-    trayPageCountRef.current = pageCount
-    if (page !== trayPage) setTrayPage(page)
-    trayPagePiecesRef.current = loose.slice(page * slots, (page + 1) * slots)
-    const gap = slots > 1 ? (rect.width - 16 - slots * 64) / (slots - 1) : 0
-    const top = (rect.height - 64) / 2
-
-    trayPagePiecesRef.current.forEach((piece, index) => {
-      const left = 8 + index * (64 + gap)
-      context.fillStyle = '#fafcff'
-      context.strokeStyle = 'rgba(82, 127, 168, 0.2)'
-      context.lineWidth = 1
-      context.beginPath()
-      context.roundRect(left, top, 64, 64, 12)
-      context.fill()
-      context.stroke()
-
-      const scale = Math.min(46 / piece.width, 46 / piece.height)
-      const margin = piece.width * 0.42
-      context.save()
-      context.translate(left + 32, top + 32)
-      context.scale(scale, scale)
-      context.translate(-piece.width / 2, -piece.height / 2)
-      const path = piecePath(piece)
-      context.beginPath()
-      context.clip(path)
-      if (boardImageRef.current) {
-        const sourceSize = piece.width + margin * 2
-        context.drawImage(boardImageRef.current, piece.targetX - margin, piece.targetY - margin, sourceSize, sourceSize, -margin, -margin, sourceSize, sourceSize)
-      } else {
-        context.fillStyle = '#527fa8'
-        context.fillRect(-margin, -margin, piece.width + margin * 2, piece.height + margin * 2)
-      }
-      context.restore()
-
-      context.save()
-      context.translate(left + 32, top + 32)
-      context.scale(scale, scale)
-      context.translate(-piece.width / 2, -piece.height / 2)
-      context.beginPath()
-      context.lineWidth = 1.5 / scale
-      context.strokeStyle = 'rgba(41, 76, 112, 0.62)'
-      context.stroke(path)
-      context.restore()
-    })
-  }
-
-  drawRef.current = () => {
+  renderRef.current = () => {
     const canvas = canvasRef.current
     const grid = gridRef.current
     const image = boardImageRef.current
@@ -339,10 +339,27 @@ export default function PuzzleBoard({
     if (!canvas || !grid || !index) return
 
     const context = canvas.getContext('2d')
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const dpr = Math.min(window.devicePixelRatio || 1, 2) * ((grid.count || 0) > 300 ? 0.75 : 1)
     const width = canvas.width / dpr
     const height = canvas.height / dpr
+    const celebration = celebrationRef.current
+    let fadeP = 0
+    if (celebration) {
+      const elapsed = Date.now() - celebration.start
+      fadeP = clamp(elapsed / FADE_MS, 0, 1)
+      const zoomP = clamp((elapsed - FADE_MS) / ZOOM_MS, 0, 1)
+      if (zoomP > 0) {
+        const eased = 1 - Math.pow(1 - zoomP, 3)
+        const { from, to } = celebration
+        viewRef.current = {
+          scale: from.scale + (to.scale - from.scale) * eased,
+          panX: from.panX + (to.panX - from.panX) * eased,
+          panY: from.panY + (to.panY - from.panY) * eased,
+        }
+      }
+    }
     const view = viewRef.current
+    const bounds = grid.bounds || { x: 0, y: 0, width: grid.width, height: grid.height }
     context.setTransform(dpr, 0, 0, dpr, 0, 0)
     context.clearRect(0, 0, width, height)
     context.fillStyle = '#e5edf2'
@@ -350,6 +367,19 @@ export default function PuzzleBoard({
     context.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.panX, dpr * view.panY)
 
     const boardRadius = Math.min(22, grid.cellSize * 0.2)
+
+    // the table the loose pieces are scattered on
+    context.save()
+    context.fillStyle = '#f3eee5'
+    context.strokeStyle = 'rgba(82, 127, 168, 0.18)'
+    context.lineWidth = 1 / view.scale
+    context.beginPath()
+    context.roundRect(bounds.x, bounds.y, bounds.width, bounds.height, boardRadius * 1.5)
+    context.fill()
+    context.stroke()
+    context.restore()
+
+    // the puzzle board in the middle
     context.save()
     context.shadowColor = 'rgba(41, 76, 112, 0.14)'
     context.shadowBlur = 24
@@ -360,17 +390,7 @@ export default function PuzzleBoard({
     context.fill()
     context.restore()
 
-    context.save()
-    context.fillStyle = '#f3eee5'
-    context.strokeStyle = 'rgba(82, 127, 168, 0.18)'
-    context.lineWidth = 1
-    context.beginPath()
-    context.roundRect(grid.width + grid.trayGap - 22, -12, Math.ceil(Math.sqrt(grid.count * 1.5)) * grid.cellSize + 44, Math.max(grid.height, grid.cellSize * 6) + 24, boardRadius)
-    context.fill()
-    context.stroke()
-    context.restore()
-
-    if (referenceVisible && image) {
+    if (referenceVisible && image && !celebration) {
       context.save()
       context.globalAlpha = 0.16
       context.beginPath()
@@ -387,8 +407,10 @@ export default function PuzzleBoard({
       width: width / view.scale,
       height: height / view.scale,
     }
-    const pieces = index.query(visible, margin).sort((a, b) => a.stackOrder - b.stackOrder)
-
+    const pieces = index.query(visible, grid.cellSize)
+      .sort((a, b) => (a.placed === b.placed ? a.stackOrder - b.stackOrder : a.placed ? -1 : 1))
+    let animating = false
+    const cheap = pieces.length > 120
     pieces.forEach((piece) => {
       const path = piecePath(piece)
       context.save()
@@ -398,31 +420,14 @@ export default function PuzzleBoard({
       context.beginPath()
       context.clip(path)
       if (image) {
-        const sourceX = piece.targetX - margin
-        const sourceY = piece.targetY - margin
         const sourceSize = piece.width + margin * 2
-        context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, -margin, -margin, sourceSize, sourceSize)
+        context.drawImage(image, piece.targetX - margin, piece.targetY - margin, sourceSize, sourceSize, -margin, -margin, sourceSize, sourceSize)
       } else {
         context.fillStyle = '#527fa8'
         context.fillRect(-margin, -margin, piece.width + margin * 2, piece.height + margin * 2)
       }
       context.restore()
-
-      context.save()
-      context.translate(piece.x + piece.width / 2, piece.y + piece.height / 2)
-      context.rotate(((piece.rotation || 0) * Math.PI) / 180)
-      context.translate(-piece.width / 2, -piece.height / 2)
-      const selected = piece === selectedPieceRef.current
-      const active = selected || piece === dragRef.current?.piece
-      context.lineWidth = active ? 2.2 / view.scale : 1.15 / view.scale
-      context.strokeStyle = piece.placed ? 'rgba(250, 252, 255, 0.92)' : selected ? 'rgba(217, 104, 104, 0.9)' : 'rgba(41, 76, 112, 0.48)'
-      context.shadowColor = active ? 'rgba(41, 76, 112, 0.36)' : 'rgba(41, 76, 112, 0.16)'
-      context.shadowBlur = (active ? 18 : 5) / view.scale
-      context.shadowOffsetY = 2 / view.scale
-      context.stroke(path)
-      context.restore()
-
-      if (piece.movingBy && piece.width * view.scale > 46) {
+      if (piece.movingBy && piece.movingBy !== user?.uid && piece.id === (piece.group || piece.id) && piece.width * view.scale > 46) {
         const playerName = players.find((player) => player.uid === piece.movingBy)?.displayName || 'Puzzle Pal'
         context.save()
         context.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -436,7 +441,178 @@ export default function PuzzleBoard({
         context.fillText(playerName, view.panX + piece.x * view.scale + 9, view.panY + piece.y * view.scale - 10)
         context.restore()
       }
+
+      let highlight = 1
+      if (celebration) {
+        const cx = piece.x + piece.width / 2 - grid.width / 2
+        const cy = piece.y + piece.height / 2 - grid.height / 2
+        const dist = Math.hypot(cx, cy) / Math.hypot(grid.width / 2, grid.height / 2)
+        highlight = 1 - clamp((fadeP * 1.5 - dist) / 0.5, 0, 1)
+      }
+      if (highlight <= 0.01) return
+
+      context.save()
+      context.globalAlpha = highlight
+      context.translate(piece.x + piece.width / 2, piece.y + piece.height / 2)
+      context.rotate(((piece.rotation || 0) * Math.PI) / 180)
+      context.translate(-piece.width / 2, -piece.height / 2)
+      const selected = piece === selectedPieceRef.current
+      const active = selected || piece === dragRef.current?.piece
+      const px = 1 / view.scale
+
+      // outline + soft shadow
+      context.lineWidth = (active ? 2.2 : 1.1) * px
+      context.strokeStyle = piece.placed ? 'rgba(41, 76, 112, 0.3)' : selected ? 'rgba(217, 104, 104, 0.9)' : 'rgba(41, 76, 112, 0.5)'
+      context.shadowColor = cheap && !active ? 'transparent' : active ? 'rgba(41, 76, 112, 0.36)' : 'rgba(41, 76, 112, 0.16)'
+      context.shadowBlur = cheap && !active ? 0 : (active ? 18 : 5) * px
+      context.shadowOffsetY = 2 * px
+      context.stroke(path)
+      context.shadowColor = 'transparent'
+      context.shadowBlur = 0
+      context.shadowOffsetY = 0
+
+      // white highlight inside the shape, for a real cut-cardboard look
+      if (!cheap && piece.width * view.scale > 14) {
+        const angle = -((piece.rotation || 0) * Math.PI) / 180
+        const d = 1.3 * px
+        const ox = d * (Math.cos(angle) - Math.sin(angle))
+        const oy = d * (Math.sin(angle) + Math.cos(angle))
+        context.save()
+        context.clip(path)
+        context.strokeStyle = 'rgba(255, 255, 255, 0.55)'
+        context.lineWidth = 2.4 * px
+        context.stroke(path)
+        context.save()
+        context.translate(ox, oy)
+        context.strokeStyle = 'rgba(255, 255, 255, 0.8)'
+        context.lineWidth = 1.8 * px
+        context.stroke(path)
+        context.restore()
+        context.save()
+        context.translate(-ox, -oy)
+        context.strokeStyle = 'rgba(20, 40, 70, 0.28)'
+        context.lineWidth = 1.8 * px
+        context.stroke(path)
+        context.restore()
+        context.restore()
+      }
+
+      // green glow when a piece clicks into place
+      const flash = piece.flashAt ? Math.max(0, 1 - (Date.now() - piece.flashAt) / 1400) : 0
+      if (flash > 0) {
+        animating = true
+        context.strokeStyle = `rgba(46, 176, 102, ${0.95 * flash})`
+        context.lineWidth = 3.4 * px
+        context.shadowColor = `rgba(46, 176, 102, ${0.8 * flash})`
+        context.shadowBlur = 14 * px
+        context.stroke(path)
+      }
+      context.restore()
     })
+
+
+    if (celebration && image) {
+      const reveal = clamp((fadeP - 0.85) / 0.15, 0, 1)
+      if (reveal > 0) {
+        context.save()
+        context.globalAlpha = reveal
+        context.beginPath()
+        context.roundRect(0, 0, grid.width, grid.height, boardRadius)
+        context.clip()
+        context.drawImage(image, 0, 0, grid.width, grid.height)
+        context.restore()
+      }
+    }
+
+    const celebrating = celebration && Date.now() - celebration.start < FADE_MS + ZOOM_MS + 60
+    if ((animating || celebrating) && !rafRef.current) {
+      rafRef.current = requestAnimationFrame(() => { rafRef.current = 0; renderRef.current?.() })
+    }
+  }
+
+  drawRef.current = () => {
+    if (frameRef.current) return
+    frameRef.current = requestAnimationFrame(() => {
+      frameRef.current = 0
+      renderRef.current?.()
+    })
+  }
+
+  function rebuildGroups() {
+    const groups = new Map()
+    piecesRef.current.forEach((piece) => {
+      const key = piece.group || piece.id
+      if (!groups.has(key)) groups.set(key, new Set())
+      groups.get(key).add(piece.id)
+    })
+    groupsRef.current = groups
+  }
+
+  function groupMembers(piece) {
+    const ids = groupsRef.current.get(piece.group || piece.id)
+    if (!ids) return [piece]
+    return [...ids].map((id) => piecesRef.current.get(id)).filter(Boolean)
+  }
+
+  function regroup(piece, key) {
+    const old = piece.group || piece.id
+    if (old !== key) {
+      const groups = groupsRef.current
+      const oldSet = groups.get(old)
+      oldSet?.delete(piece.id)
+      if (oldSet && !oldSet.size) groups.delete(old)
+      if (!groups.has(key)) groups.set(key, new Set())
+      groups.get(key).add(piece.id)
+    }
+    piece.group = key
+  }
+
+  // Joins the dropped cluster to any true neighbours that line up with it.
+  // Returns the merged cluster, or null if nothing joined.
+  function connectGroup(members) {
+    const tolerance = gridRef.current.cellSize * 0.14
+    const pieces = piecesRef.current
+    const joined = new Map(members.map((member) => [member.id, member]))
+    const now = Date.now()
+    let merged = false
+
+    const findJoin = () => {
+      for (const piece of joined.values()) {
+        for (const [dr, dc] of NEIGHBORS) {
+          const neighbor = pieces.get(`${piece.row + dr}-${piece.column + dc}`)
+          if (!neighbor || neighbor.placed || joined.has(neighbor.id)) continue
+          const dx = piece.x + (neighbor.targetX - piece.targetX) - neighbor.x
+          const dy = piece.y + (neighbor.targetY - piece.targetY) - neighbor.y
+          if (Math.hypot(dx, dy) > tolerance) continue
+          const others = groupMembers(neighbor)
+          const blocked = others.some((member) => member.placed
+            || (member.rotation || 0) % 360 !== 0
+            || (member.movingBy && member.movingBy !== user.uid && Number(member.lockUntil) > now))
+          if (blocked) continue
+          return { others, dx, dy }
+        }
+      }
+      return null
+    }
+
+    for (let join = findJoin(); join; join = findJoin()) {
+      join.others.forEach((member) => {
+        member.x += join.dx
+        member.y += join.dy
+        joined.set(member.id, member)
+      })
+      merged = true
+    }
+    if (!merged) return null
+
+    const all = [...joined.values()]
+    const key = all.reduce((a, b) => (a.id < b.id ? a : b)).id
+    all.forEach((member) => {
+      regroup(member, key)
+      member.stackOrder = now
+      member.flashAt = now
+    })
+    return all
   }
 
   function pointFromEvent(event) {
@@ -458,119 +634,198 @@ export default function PuzzleBoard({
     return path
   }
 
+  // Hit-testing uses its own untransformed canvas. The visible canvas is zoomed/panned,
+  // and isPointInPath applies that transform to the path, which broke picking up pieces.
   function hitPiece(point) {
-    const view = viewRef.current
-    const world = screenToWorld(point, view)
     const grid = gridRef.current
-    const nearby = indexRef.current?.query({ x: world.x, y: world.y, width: 1, height: 1 }, grid.cellSize * 0.8) || []
-    const hitContext = canvasRef.current.getContext('2d')
-    return nearby
+    if (!grid || !indexRef.current) return null
+    if (!hitContextRef.current) hitContextRef.current = document.createElement('canvas').getContext('2d')
+    const hitContext = hitContextRef.current
+    const world = screenToWorld(point, viewRef.current)
+    const nearby = indexRef.current
+      .query({ x: world.x, y: world.y, width: 1, height: 1 }, grid.cellSize)
       .filter((piece) => !piece.placed)
       .sort((a, b) => b.stackOrder - a.stackOrder)
-      .find((piece) => {
-        const dx = world.x - piece.x - piece.width / 2
-        const dy = world.y - piece.y - piece.height / 2
-        const angle = -((piece.rotation || 0) * Math.PI) / 180
-        const localX = dx * Math.cos(angle) - dy * Math.sin(angle) + piece.width / 2
-        const localY = dx * Math.sin(angle) + dy * Math.cos(angle) + piece.height / 2
-        return hitContext.isPointInPath(piecePath(piece), localX, localY)
-      })
+
+    const exact = nearby.find((piece) => {
+      const dx = world.x - piece.x - piece.width / 2
+      const dy = world.y - piece.y - piece.height / 2
+      const angle = -((piece.rotation || 0) * Math.PI) / 180
+      const localX = dx * Math.cos(angle) - dy * Math.sin(angle) + piece.width / 2
+      const localY = dx * Math.sin(angle) + dy * Math.cos(angle) + piece.height / 2
+      return hitContext.isPointInPath(piecePath(piece), localX, localY)
+    })
+    if (exact) return exact
+
+    // forgiving fallback: a tap very close to a piece's middle still grabs it
+    let best = null
+    let bestDistance = grid.cellSize * 0.45
+    nearby.forEach((piece) => {
+      const distance = Math.hypot(world.x - piece.x - piece.width / 2, world.y - piece.y - piece.height / 2)
+      if (distance < bestDistance) { best = piece; bestDistance = distance }
+    })
+    return best
   }
 
-  async function beginPiece(piece, pointerId, point, fromTray, pressing) {
-    if (!pressing) return // pieces are only picked up by a real click/tap
+  function grabPiece(piece, event, point) {
     const world = screenToWorld(point, viewRef.current)
-    const pending = { pointerId, point, piece, released: false, fromTray, pressing }
-    pendingPointerRef.current = pending
-    const locked = await roomControl.acquirePiece(piece)
-    if (!locked) {
-      hoverBlockRef.current = piece.id
-      if (pendingPointerRef.current === pending) pendingPointerRef.current = null
-      return
-    }
-    if (pending.released || pendingPointerRef.current !== pending) {
-      await roomControl.release(piece.id, { x: piece.x, y: piece.y, placed: false, rotation: piece.rotation || 0 })
-      return
-    }
-    pendingPointerRef.current = null
-    if (fromTray) {
-      piece.x = world.x - piece.width / 2
-      piece.y = world.y - piece.height / 2
-      indexRef.current.update(piece)
-      trayDrawRef.current?.()
-    }
-    piece.stackOrder = Date.now()
-    dragRef.current = {
+    const members = groupMembers(piece)
+    const leader = members.reduce((a, b) => (a.id < b.id ? a : b))
+    const stamp = Date.now()
+    const drag = {
       kind: 'piece',
-      carry: true,
       piece,
-      pointerId,
-      pressing: pending.pressing,
-      downPoint: pending.pressing ? point : null,
+      pointerId: event.pointerId,
+      pressing: true,
+      tapAt: Date.now(),
+      downPoint: point,
       offsetX: world.x - piece.x,
       offsetY: world.y - piece.y,
+      members: members.map((member) => ({
+        piece: member,
+        dx: member.x - piece.x,
+        dy: member.y - piece.y,
+        originalX: member.x,
+        originalY: member.y,
+      })),
       anchor: null,
-      changed: false,
+      locked: false,
+      lock: null,
     }
+    members.forEach((member) => { member.stackOrder = stamp })
     selectedPieceRef.current = piece
+    dragRef.current = drag
     onSound('pickup')
     drawRef.current?.()
+
+    drag.lock = Promise.resolve(roomControl.acquirePiece(leader)).catch(() => false).then((ok) => {
+      if (!ok) console.warn('Piece lock failed', leader.id, roomControl.piecesRef.current[leader.id], 'status:', level.roomStatus)
+      if (ok) { drag.locked = true; return true }
+      if (dragRef.current === drag) {
+        dragRef.current = null
+        selectedPieceRef.current = null
+        drag.members.forEach((member) => {
+          member.piece.x = member.originalX
+          member.piece.y = member.originalY
+          indexRef.current?.update(member.piece)
+        })
+        drawRef.current?.()
+      }
+      return false
+    })
   }
 
   function moveHeld(drag, x, y) {
-    const piece = drag.piece
-    piece.x = x
-    piece.y = y
-    drag.changed = true
-    indexRef.current.update(piece)
+    drag.members.forEach((member) => {
+      member.piece.x = x + member.dx
+      member.piece.y = y + member.dy
+      indexRef.current.update(member.piece)
+    })
     drawRef.current?.()
+    if (!drag.locked) return
     const now = Date.now()
     if (now - lastWriteRef.current.at > 120 && !lastWriteRef.current.pending) {
       lastWriteRef.current.at = now
-      lastWriteRef.current.pending = roomControl.move(piece.id, piece.x, piece.y, user)
+      lastWriteRef.current.pending = roomControl.moveMany(drag.members.map((member) => ({ id: member.piece.id, x: member.piece.x, y: member.piece.y, rotation: member.piece.rotation || 0 })))
         .catch(() => { })
         .finally(() => { lastWriteRef.current.pending = null })
       onSound('move')
     }
+
+  }
+
+  // A second quick tap on a carried piece rotates it instead of dropping it
+  function tapWhileCarrying(drag) {
+    onSound('rotate')
+    if (!level.allowRotation || Date.now() - drag.tapAt > 400) return false
+    drag.tapAt = Date.now()
+    if (drag.members.length > 1) return true // joined pieces can't rotate, but the tap is still used up
+    const piece = drag.piece
+    piece.rotation = ((piece.rotation || 0) + 90) % 360
+    indexRef.current.update(piece)
+    drawRef.current?.()
+    onSound('pickup')
+    if (drag.locked) {
+      roomControl.moveMany([{ id: piece.id, x: piece.x, y: piece.y, rotation: piece.rotation }]).catch(() => { })
+    }
+    return true
   }
 
   async function dropPiece() {
     const drag = dragRef.current
     if (!drag || drag.kind !== 'piece') return
     const piece = drag.piece
+    const members = drag.members.map((member) => member.piece)
     dragRef.current = null
-    const grid = gridRef.current
-    const withinBoard = piece.x >= 0 && piece.y >= 0 && piece.x <= grid.width && piece.y <= grid.height
-    const correct = (piece.rotation || 0) % 360 === 0 && isCorrectPlacement(piece, piece.x, piece.y, viewRef.current.scale)
-    if (correct) {
-      piece.x = piece.targetX
-      piece.y = piece.targetY
-      piece.placed = true
-      piece.placedBy = user.uid
-      onSound('correct')
-    } else if (withinBoard) {
-      onSound('incorrect')
-    }
-    hoverBlockRef.current = piece.id // don't instantly re-grab what we just dropped
     selectedPieceRef.current = null
-    indexRef.current.update(piece)
+    const grid = gridRef.current
+    const upright = members.every((member) => (member.rotation || 0) % 360 === 0)
+    const correct = upright && isCorrectPlacement(piece, piece.x, piece.y)
+    let affected = members
+
+    if (correct) {
+      const now = Date.now()
+      members.forEach((member) => {
+        member.x = member.targetX
+        member.y = member.targetY
+        member.placed = true
+        member.placedBy = user.uid
+        member.flashAt = now
+      })
+      onSound('correct')
+    }
+    members.forEach((member) => indexRef.current.update(member))
     drawRef.current?.()
+
+    const locked = await drag.lock
+    if (!locked) {
+      drag.members.forEach((member) => {
+        member.piece.placed = false
+        member.piece.x = member.originalX
+        member.piece.y = member.originalY
+        indexRef.current.update(member.piece)
+      })
+      drawRef.current?.()
+      return
+    }
+
+    if (!correct) {
+      const joined = upright ? connectGroup(members) : null
+      if (joined) {
+        affected = joined
+        onSound('connect')
+
+      } else if (piece.x >= 0 && piece.y >= 0 && piece.x <= grid.width && piece.y <= grid.height) {
+        onSound('incorrect')
+      } else {
+        onSound('drop')      // dropped out on the table
+      }
+      affected.forEach((member) => indexRef.current.update(member))
+      drawRef.current?.()
+    }
+
     const queued = lastWriteRef.current.pending
     if (queued) await queued
-    await roomControl.release(piece.id, { x: piece.x, y: piece.y, placed: correct, rotation: piece.rotation || 0 })
+    await roomControl.releaseMany(affected.map((member) => ({
+      id: member.id,
+      x: member.x,
+      y: member.y,
+      placed: member.placed,
+      rotation: member.rotation || 0,
+      group: member.group || member.id,
+    })))
     drawRef.current?.()
-    trayDrawRef.current?.()
   }
 
-  async function handlePointerDown(event) {
+  function handlePointerDown(event) {
+    console.log('down', { ready: generation.ready, disabled, status: level.roomStatus, host: isHost })
     if (!generation.ready || disabled) return
-    event.currentTarget.setPointerCapture(event.pointerId)
+    event.currentTarget.setPointerCapture?.(event.pointerId)
     const point = pointFromEvent(event)
-    const fromTray = event.currentTarget === trayCanvasRef.current
     const pointers = pointerPointsRef.current
     if (event.pointerType === 'touch') pointers.set(event.pointerId, point)
 
-    // Already holding a piece: a click/tap drops it, touch-drag moves it from anywhere
+    // Already carrying a piece: click drops it; on touch, drag anywhere moves it and a tap drops it
     const held = dragRef.current
     if (held?.kind === 'piece') {
       event.preventDefault()
@@ -580,11 +835,11 @@ export default function PuzzleBoard({
           held.anchor = { pointerId: event.pointerId, worldX: world.x, worldY: world.y, pieceX: held.piece.x, pieceY: held.piece.y, moved: false }
         }
       } else if (event.button === 0) {
-        await dropPiece()
+        if (!tapWhileCarrying(held)) void dropPiece()
+
       }
       return
     }
-    if (pendingPointerRef.current) return
 
     if (event.pointerType === 'touch' && pointers.size >= 2) {
       if (dragRef.current?.kind === 'pan') {
@@ -604,46 +859,24 @@ export default function PuzzleBoard({
       return
     }
 
-    let piece = null
-    if (event.button === 0 && fromTray) {
-      const rect = event.currentTarget.getBoundingClientRect()
-      const slots = Math.max(1, Math.floor((rect.width - 16) / 72))
-      const gap = slots > 1 ? (rect.width - 16 - slots * 64) / (slots - 1) : 0
-      const x = event.clientX - rect.left - 8
-      const y = event.clientY - rect.top - (rect.height - 64) / 2
-      const slot = Math.floor(x / (64 + gap))
-      if (x >= 0 && x <= rect.width - 16 && y >= 0 && y <= 64) piece = trayPagePiecesRef.current[slot] || null
-    } else if (event.button === 0) {
-      piece = hitPiece(point)
-    }
-    if (fromTray && !piece) {
-      if (event.pointerType === 'touch') traySwipeStartRef.current = { pointerId: event.pointerId, x: event.clientX }
-      return
-    }
+    const piece = event.button === 0 ? hitPiece(point) : null
+    console.log('hit', piece?.id, 'remote has it:', Boolean(roomControl.piecesRef.current[piece?.id]))
     if (piece) {
+      const someoneHasIt = groupMembers(piece).some((member) => member.movingBy && member.movingBy !== user.uid && Number(member.lockUntil) > Date.now())
+      if (someoneHasIt) return
       event.preventDefault()
-      await beginPiece(piece, event.pointerId, point, fromTray, true)
+      grabPiece(piece, event, point)
       return
     }
 
     dragRef.current = { kind: 'pan', pointerId: event.pointerId, startX: point.x, startY: point.y, panX: viewRef.current.panX, panY: viewRef.current.panY, moved: false }
   }
 
-    function handlePointerMove(event) {
+  function handlePointerMove(event) {
     if (disabled) return
     const pointers = pointerPointsRef.current
     if (event.pointerType === 'touch' && pointers.has(event.pointerId)) pointers.set(event.pointerId, pointFromEvent(event))
-    const traySwipe = traySwipeStartRef.current
-    if (event.currentTarget === trayCanvasRef.current && traySwipe?.pointerId === event.pointerId) {
-      const distance = event.clientX - traySwipe.x
-      if (Math.abs(distance) > 26) {
-        const direction = distance < 0 ? 1 : -1
-        setTrayPage((page) => clamp(page + direction, 0, trayPageCountRef.current - 1))
-        traySwipeStartRef.current = { pointerId: event.pointerId, x: event.clientX }
-      }
-      event.preventDefault()
-      return
-    }
+
     const pinch = pinchRef.current
     if (pinch?.pointerIds.includes(event.pointerId)) {
       const first = pointers.get(pinch.pointerIds[0])
@@ -661,15 +894,12 @@ export default function PuzzleBoard({
     }
 
     const drag = dragRef.current
-
-    // Carrying a piece (only exists after a click/tap picked one up)
     if (drag?.kind === 'piece') {
-      const point = pointFromEvent(event)
-      const world = screenToWorld(point, viewRef.current)
+      const world = screenToWorld(pointFromEvent(event), viewRef.current)
       if (event.pointerType === 'touch') {
         const anchor = drag.anchor
         if (anchor && anchor.pointerId === event.pointerId) {
-          if (!anchor.moved && Math.hypot(world.x - anchor.worldX, world.y - anchor.worldY) * viewRef.current.scale <= 6) return
+          if (!anchor.moved && Math.hypot(world.x - anchor.worldX, world.y - anchor.worldY) * viewRef.current.scale <= TAP_SLOP) return
           anchor.moved = true
           moveHeld(drag, anchor.pieceX + world.x - anchor.worldX, anchor.pieceY + world.y - anchor.worldY)
           event.preventDefault()
@@ -684,8 +914,8 @@ export default function PuzzleBoard({
     }
 
     if (!drag || drag.pointerId !== event.pointerId) return
-    const point = pointFromEvent(event)
     if (drag.kind === 'pan') {
+      const point = pointFromEvent(event)
       if (Math.hypot(point.x - drag.startX, point.y - drag.startY) > 3) drag.moved = true
       viewRef.current.panX = drag.panX + point.x - drag.startX
       viewRef.current.panY = drag.panY + point.y - drag.startY
@@ -693,9 +923,8 @@ export default function PuzzleBoard({
     }
   }
 
-  async function handlePointerUp(event) {
+  function handlePointerUp(event) {
     const pointers = pointerPointsRef.current
-    if (traySwipeStartRef.current?.pointerId === event.pointerId) traySwipeStartRef.current = null
     if (event.pointerType === 'touch') pointers.delete(event.pointerId)
     const pinch = pinchRef.current
     if (pinch?.pointerIds.includes(event.pointerId)) {
@@ -713,31 +942,18 @@ export default function PuzzleBoard({
     }
 
     const drag = dragRef.current
-
     if (drag?.kind === 'piece') {
       const anchor = drag.anchor
       if (anchor && anchor.pointerId === event.pointerId) {
         drag.anchor = null
-        if (!anchor.moved) await dropPiece() // a tap drops the piece
+        if (!anchor.moved) { if (!tapWhileCarrying(drag)) void dropPiece() }
         return
       }
       if (drag.pointerId === event.pointerId && drag.pressing) {
         drag.pressing = false
         const point = pointFromEvent(event)
-        // press-and-drag then release = drop; a plain tap/click keeps carrying
-        if (drag.downPoint && Math.hypot(point.x - drag.downPoint.x, point.y - drag.downPoint.y) > 6) await dropPiece()
-      }
-      return
-    }
-
-    const pending = pendingPointerRef.current
-    if (pending?.pointerId === event.pointerId && pending.pressing) {
-      const point = pointFromEvent(event)
-      if (Math.hypot(point.x - pending.point.x, point.y - pending.point.y) <= 6) {
-        pending.pressing = false // it was a tap: keep carrying once the lock arrives
-      } else {
-        pending.released = true
-        pendingPointerRef.current = null
+        // press, drag and release = drop there; a plain tap/click keeps carrying
+        if (drag.downPoint && Math.hypot(point.x - drag.downPoint.x, point.y - drag.downPoint.y) > TAP_SLOP) void dropPiece()
       }
       return
     }
@@ -764,13 +980,16 @@ export default function PuzzleBoard({
   }
 
   async function rotateSelected() {
+   
     const piece = selectedPieceRef.current
     if (!level.allowRotation || !piece || piece.placed) return
-    const locked = await roomControl.acquirePiece(piece)
-    if (!locked) return
+    if (groupMembers(piece).length > 1) return // joined pieces can't be rotated
     piece.rotation = ((piece.rotation || 0) + 90) % 360
     indexRef.current.update(piece)
     drawRef.current?.()
+     onSound('rotate')   // replaces onSound('pickup') in tapWhileCarrying; add to rotateSelected
+    // a carried piece saves its rotation when it is dropped
+    if (dragRef.current?.piece === piece) return
     await roomControl.release(piece.id, { x: piece.x, y: piece.y, placed: false, rotation: piece.rotation })
     drawRef.current?.()
   }
@@ -796,17 +1015,27 @@ export default function PuzzleBoard({
     if (piece && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
       event.preventDefault()
       const step = 12 / viewRef.current.scale
-      if (event.key === 'ArrowUp') piece.y -= step
-      if (event.key === 'ArrowDown') piece.y += step
-      if (event.key === 'ArrowLeft') piece.x -= step
-      if (event.key === 'ArrowRight') piece.x += step
-      indexRef.current.update(piece)
-      drawRef.current?.()
-      void roomControl.move(piece.id, piece.x, piece.y)
+      const drag = dragRef.current?.piece === piece ? dragRef.current : null
+      let nextX = piece.x
+      let nextY = piece.y
+      if (event.key === 'ArrowUp') nextY -= step
+      if (event.key === 'ArrowDown') nextY += step
+      if (event.key === 'ArrowLeft') nextX -= step
+      if (event.key === 'ArrowRight') nextX += step
+      if (drag) {
+        moveHeld(drag, nextX, nextY)
+      } else {
+        piece.x = nextX
+        piece.y = nextY
+        indexRef.current.update(piece)
+        drawRef.current?.()
+        void roomControl.move(piece.id, piece.x, piece.y)
+      }
       return
     }
     if (event.key === 'Enter' && piece) {
       event.preventDefault()
+      if (dragRef.current?.piece === piece) { await dropPiece(); return }
       const correct = (piece.rotation || 0) % 360 === 0 && isCorrectPlacement(piece, piece.x, piece.y, viewRef.current.scale)
       if (correct) {
         piece.x = piece.targetX
@@ -824,8 +1053,10 @@ export default function PuzzleBoard({
     }
     if (event.key === 'Escape' && piece) {
       event.preventDefault()
-      if (dragRef.current?.piece === piece) dragRef.current = null
-      await roomControl.release(piece.id, { x: piece.x, y: piece.y, placed: false, rotation: piece.rotation || 0 })
+      const drag = dragRef.current?.piece === piece ? dragRef.current : null
+      dragRef.current = null
+      const held = drag ? drag.members.map((member) => member.piece) : [piece]
+      await roomControl.releaseMany(held.map((member) => ({ id: member.id, x: member.x, y: member.y, placed: false, rotation: member.rotation || 0, group: member.group || member.id })))
       selectedPieceRef.current = null
       drawRef.current?.()
     }
@@ -846,21 +1077,9 @@ export default function PuzzleBoard({
   }
 
   function resetView() {
-    const grid = gridRef.current
     const canvas = canvasRef.current
-    if (!grid || !canvas) return
-    const mobile = window.matchMedia('(max-width: 760px)').matches
-    const fit = Math.min(
-      (canvas.clientWidth - 44) / (mobile ? grid.width : grid.width + grid.trayGap + grid.cellSize * 5),
-      (canvas.clientHeight - 50) / (mobile ? grid.height : Math.max(grid.height, grid.cellSize * 6)),
-    )
-    fitZoomRef.current = clamp(fit, ZOOM_MIN, 1.15)
-    viewRef.current = {
-      scale: fitZoomRef.current,
-      panX: Math.max(18, (canvas.clientWidth - grid.width * fitZoomRef.current) / 2),
-      panY: 38,
-    }
-    setZoom(viewRef.current.scale)
+    if (!canvas) return
+    fitView(canvas.clientWidth, canvas.clientHeight)
     drawRef.current?.()
   }
 
@@ -872,7 +1091,7 @@ export default function PuzzleBoard({
   }
 
   return (
-    <div ref={containerRef} className="puzzle-canvas-shell" aria-label={`${level.title} puzzle workspace`}>
+    <div ref={containerRef} className={`puzzle-canvas-shell ${celebrate ? 'is-celebrating' : ''} ${rising ? 'is-rising' : ''}`} aria-label={`${level.title} puzzle workspace`}>
       {!generation.ready && (
         <div className="board-loading" role="status" aria-live="polite">
           <div className="loading-piece" aria-hidden="true" />
@@ -884,15 +1103,16 @@ export default function PuzzleBoard({
       <canvas
         ref={canvasRef}
         className={`puzzle-canvas ${generation.ready ? 'is-ready' : ''}`}
+        style={{ touchAction: 'none' }}
         role="application"
         tabIndex={0}
-        aria-label="Jigsaw puzzle board. Drag pieces to move them. Use the zoom controls to change the view."
+        aria-label="Jigsaw puzzle board. Click or tap a piece to pick it up, move it, then click or tap again to put it down."
         aria-describedby="puzzle-keyboard-help"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        onWheel={handleWheel}
+
         onKeyDown={handleKeyboard}
       />
       <p id="puzzle-keyboard-help" className="sr-only">Press Space to select the next loose piece. Use arrow keys to move it, Enter to place it, and Escape to release it. Press R to rotate a piece when rotation is enabled.</p>
@@ -903,10 +1123,6 @@ export default function PuzzleBoard({
         <button type="button" aria-label="Reset view" onClick={resetView}>Reset</button>
         {level.allowRotation && <button type="button" aria-label="Rotate selected piece" onClick={rotateSelected}><RotateCw size={15} /> Rotate</button>}
       </div>
-      <section className={`puzzle-piece-tray ${trayOpen ? 'is-open' : ''}`} aria-label="Unplaced puzzle pieces">
-        <header className="puzzle-tray-heading"><strong>Piece tray</strong><span>Drag a piece onto the board</span><button type="button" aria-label={trayOpen ? 'Collapse piece tray' : 'Expand piece tray'} aria-expanded={trayOpen} onClick={() => onTrayToggle?.(!trayOpen)}>{trayOpen ? <ChevronDown size={18} /> : <ChevronUp size={18} />}</button></header>
-        {trayOpen && <div className="puzzle-tray-content"><button type="button" aria-label="Previous pieces" disabled={trayPage === 0} onClick={() => setTrayPage((page) => Math.max(0, page - 1))}><ChevronLeft size={20} /></button><canvas ref={trayCanvasRef} className="puzzle-tray-canvas" role="application" tabIndex={0} aria-label="Drag a loose piece to the puzzle board" onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp} /><span className="puzzle-tray-page" aria-live="polite">{trayPage + 1}/{trayPages}</span><button type="button" aria-label="More pieces" disabled={trayPage >= trayPages - 1} onClick={() => setTrayPage((page) => Math.min(trayPages - 1, page + 1))}><ChevronRight size={20} /></button></div>}
-      </section>
     </div>
   )
 }

@@ -13,6 +13,8 @@ import {
   setRoomStatus,
   subscribeRoom,
   updateRoomSettings,
+  movePieces,
+  releasePieces
 } from '../services/roomService'
 import { playSound } from '../services/audioManager'
 
@@ -76,7 +78,7 @@ export function useRoom(roomId, user) {
         previousPlayerIds.delete(event.uid)
         playSound('leave')
         setRoom((current) => ({ ...current, players: current.players.filter((player) => player.uid !== event.uid) }))
-      } else if (event.type === 'piece') {
+           } else if (event.type === 'piece') {
         const previous = piecesRef.current[event.piece.id]
         piecesRef.current[event.piece.id] = event.piece
         if (previous && previous.placed !== event.piece.placed) {
@@ -88,6 +90,12 @@ export function useRoom(roomId, user) {
           setActivities((current) => [{ id: event.piece.id, uid: event.piece.placedBy, at: event.piece.updatedAt }, ...current].slice(0, 6))
         }
         pieceListeners.current.forEach((listener) => listener({ type: 'piece', piece: event.piece }))
+      } else if (event.type === 'piece-removed') {
+        const removed = piecesRef.current[event.id]
+        delete piecesRef.current[event.id]
+        if (removed?.placed) setPlacedCount((count) => Math.max(0, count - 1))
+        setActivities((current) => current.filter((item) => item.id !== event.id))
+        pieceListeners.current.forEach((listener) => listener({ type: 'reset', pieces: piecesRef.current }))
       } else if (event.type === 'message') {
         setRoom((current) => current.chat.some((message) => message.id === event.message.id)
           ? current
@@ -114,6 +122,8 @@ export function useRoom(roomId, user) {
   const acquirePiece = useCallback((piece) => lockPiece(roomId, piece, user), [roomId, user])
   const move = useCallback((pieceId, x, y) => movePiece(roomId, pieceId, x, y, user), [roomId, user])
   const release = useCallback((pieceId, placement) => releasePiece(roomId, pieceId, placement, user), [roomId, user])
+    const moveMany = useCallback((items) => movePieces(roomId, items, user), [roomId, user])
+  const releaseMany = useCallback((items) => releasePieces(roomId, items, user), [roomId, user])
   const message = useCallback((text) => sendRoomMessage(roomId, user, text), [roomId, user])
   const complete = useCallback((details) => recordCompletion({ ...details, roomId }), [roomId])
 
@@ -135,6 +145,8 @@ export function useRoom(roomId, user) {
     release,
     message,
     complete,
+    moveMany,
+    releaseMany,
   }
 }
 

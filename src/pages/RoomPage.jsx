@@ -77,7 +77,7 @@ export default function RoomPage({ roomControl, levels, user, onShare, onGame, o
 
       <div className="room-layout">
         <section className="room-main-column">
-          <div className="room-scene">
+          <div className="room-scene" style={selectedLevel ? { '--scene-image': `url("${selectedLevel.imageURL}")` } : undefined}>
             {selectedLevel && <div className="room-scene-image" aria-hidden="true"><img className={imageRotation % 180 ? 'is-quarter-turn' : undefined} src={selectedLevel.imageURL} alt="" style={{ '--room-image-rotation': `${imageRotation}deg` }} /></div>}
             <div className="room-scene-wash" />
             <div className="room-scene-content"><span className="room-scene-tag"><Sparkles size={14} /> YOUR PUZZLE TABLE</span><h2>{room.meta.title || 'A little puzzle room'}</h2><p>{selectedLevel ? `${selectedLevel.title} · ${selectedLevel.pieceCount.toLocaleString()} pieces` : 'Choose a puzzle to get started'}</p></div>

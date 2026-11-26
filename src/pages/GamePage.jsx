@@ -46,14 +46,23 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
   const [completionError, setCompletionError] = useState('')
   const [copied, setCopied] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
+  const [actualPieces, setActualPieces] = useState(0)
+  const totalPieces = actualPieces || Number(level?.pieceCount || 0)
   const [chatOpen, setChatOpen] = useState(false)
   const [trayOpen, setTrayOpen] = useState(false)
   const completionKey = `${room.id || ''}:${room.game.sessionId || ''}`
   const completionHandled = useRef('')
-  const isComplete = status === 'completed' || placedCount >= Number(level?.pieceCount || Infinity)
-  const progress = level?.pieceCount ? Math.min(100, Math.round((placedCount / level.pieceCount) * 100)) : 0
+  const handleGenerated = useCallback((grid, count) => setActualPieces(count), [])
   const currentLevel = level ? { ...level, roomStatus: status } : null
-
+  const isComplete = status === 'completed' || (totalPieces > 0 && placedCount >= totalPieces)
+  const progress = totalPieces ? Math.min(100, Math.round((placedCount / totalPieces) * 100)) : 0
+  const [skipCelebration, setSkipCelebration] = useState(isComplete) // already finished when the page opened
+  const [celebrationDone, setCelebrationDone] = useState(false)
+  useEffect(() => {
+    if (!isComplete) { setSkipCelebration(false); setCelebrationDone(false) }
+  }, [isComplete])
+  const celebrate = isComplete && !skipCelebration
+  const showCompletion = isComplete && (skipCelebration || celebrationDone)
   const contributionCounts = useMemo(() => {
     const counts = {}
     Object.values(piecesRef.current).forEach((piece) => {
@@ -85,6 +94,8 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
     return [...rows.values()].sort((a, b) => b.piecesPlaced - a.piecesPlaced)
   }, [room.players, piecesRef, contributionCounts])
 
+  useEffect(() => { setActualPieces(0) }, [level?.id])
+
   useEffect(() => {
     setElapsed(currentElapsed(room.game))
     const timer = window.setInterval(() => setElapsed(currentElapsed(room.game)), 1000)
@@ -92,34 +103,35 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
   }, [room.game.status, room.game.elapsedSeconds, room.game.resumedAt, room.game.startedAt])
 
   useEffect(() => {
-    if (!host || !level || placedCount < level.pieceCount || completionHandled.current === completionKey) return
-    completionHandled.current = completionKey
-    async function finish() {
-      try {
-        setSavingCompletion(true)
-        setCompletionError('')
-        if (status !== 'completed') await roomControl.controlStatus('completed')
-        audio.playSound('complete')
-        const result = await roomControl.complete({
-          uid: user.uid,
-          levelId: level.id,
-          players: room.players,
-          totalTime: elapsed,
-          placedCount: level.pieceCount,
-          contributionCounts,
-        })
-        setEarnedAchievements(result?.achievements || [])
-        await onCompletionSaved?.()
-      } catch (error) {
-        setCompletionError(error.message || 'Could not save the completion record.')
-      } finally {
-        setSavingCompletion(false)
-      }
+  if (!level || !totalPieces || placedCount < totalPieces || completionHandled.current === completionKey) return
+  if (!host && status !== 'completed') return // wait for the host to lock in the final time
+  completionHandled.current = completionKey
+  async function finish() {
+    try {
+      setSavingCompletion(true)
+      setCompletionError('')
+      if (host && status !== 'completed') await roomControl.controlStatus('completed')
+      audio.playSound('complete')
+      const result = await roomControl.complete({
+        uid: user.uid,
+        sessionId: room.game.sessionId,
+        levelId: level.id,
+        players: room.players,
+        totalTime: elapsed,
+        placedCount: totalPieces,
+        contributionCounts,
+      })
+      setEarnedAchievements(result?.achievements || [])
+      await onCompletionSaved?.()
+    } catch (error) {
+      setCompletionError(error.message || 'Could not save the completion record.')
+    } finally {
+      setSavingCompletion(false)
     }
-    void finish()
-  }, [host, level, placedCount, completionKey, status, roomControl.controlStatus, roomControl.complete, room.players, elapsed, contributionCounts, audio.playSound, onCompletionSaved, completionAttempt, user?.uid])
+  }
+  void finish()
+}, [host, level, placedCount, completionKey, status, roomControl.controlStatus, roomControl.complete, room.players, room.game.sessionId, elapsed, contributionCounts, audio.playSound, onCompletionSaved, completionAttempt, user?.uid, totalPieces])
 
-  const handleGenerated = useCallback(() => {}, [])
   const handleReadyChange = useCallback((ready) => setBoardReady(ready), [])
 
   async function togglePause() {
@@ -174,7 +186,7 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
       </header>
 
       <div className="game-stat-strip">
-        <div className="progress-summary"><div><span>Table progress</span><strong>{progress}%</strong></div><div className="progress-track" role="progressbar" aria-label="Puzzle progress" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${progress}%` }} /></div><small>{placedCount.toLocaleString()} of {Number(level?.pieceCount || 0).toLocaleString()} pieces placed</small></div>
+        <div className="progress-summary"><div><span>Table progress</span><strong>{progress}%</strong></div><div className="progress-track" role="progressbar" aria-label="Puzzle progress" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${progress}%` }} /></div><strong>{Math.max(0, totalPieces - placedCount).toLocaleString()}</strong></div>
         <div className="game-stat"><span className="game-stat-icon"><PuzzleGlyph /></span><div><small>Pieces left</small><strong>{Math.max(0, Number(level?.pieceCount || 0) - placedCount).toLocaleString()}</strong></div></div>
         <div className="game-stat"><span className="game-stat-icon timer-icon"><Clock3 size={17} /></span><div><small>Time together</small><strong className="timer-value">{clockTime(elapsed)}</strong></div></div>
         <div className={`game-state-pill state-${status}`}><span className="live-dot" />{status === 'paused' ? 'On a little break' : status === 'completed' ? 'All together now' : status === 'playing' ? 'In progress' : 'Getting ready'}</div>
@@ -193,6 +205,8 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
           <div className={`board-frame ${status === 'paused' ? 'board-paused' : ''}`}>
             {currentLevel && <PuzzleBoard
               level={currentLevel}
+              celebrate={celebrate}
+              onCelebrationEnd={() => setCelebrationDone(true)}
               roomControl={roomControl}
               user={user}
               isHost={host}
@@ -208,7 +222,7 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
             />}
             {status === 'paused' && <div className="board-paused-overlay"><div className="pause-mark"><Pause size={21} /></div><strong>Just a little pause</strong><span>{host ? 'Resume when you are ready.' : 'The host will be right back.'}</span>{host && <button type="button" className="button button-primary" onClick={togglePause}><Play size={15} fill="currentColor" /> Keep going</button>}</div>}
           </div>
-          <div className="board-hint-row"><span><span className="hint-dot" /> Hold and drag a piece to move it</span><span>Zoom, pan, and find your way around</span><button type="button" onClick={() => setReferenceVisible((value) => !value)}>{referenceVisible ? 'Hide reference image' : 'Show reference image'}</button></div>
+          <div className="board-hint-row"><span><span className="hint-dot" /> Tap a piece to pick it up, tap again to drop it{level?.allowRotation ? ', double-tap to rotate' : ''}</span><span>Zoom, pan, and find your way around</span><button type="button" onClick={() => setReferenceVisible((value) => !value)}>{referenceVisible ? 'Hide reference image' : 'Show reference image'}</button></div>
           {completionError && !isComplete && <p className="form-error game-error" role="alert">{completionError}</p>}
         </section>
 
@@ -222,7 +236,7 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
         </aside>
       </div>
 
-      {isComplete && <div className="completion-screen" role="dialog" aria-modal="true" aria-labelledby="completion-title">
+      {showCompletion && <div className="completion-screen" role="dialog" aria-modal="true" aria-labelledby="completion-title">
         <div className="completion-confetti" aria-hidden="true"><Sparkles /><Sparkles /><Sparkles /></div>
         <button type="button" className="completion-close" onClick={onBackToRoom} aria-label="Return to room"><X size={18} /></button>
         <div className="completion-photo"><img src={level?.imageURL} alt={level?.imageAlt || ''} /><span><Check size={16} /> Puzzle complete</span></div>
@@ -231,8 +245,12 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
         <div className="completion-contributors"><div className="completion-contributors-heading"><Sparkles size={15} /><strong>Everybody brought something</strong></div><div className="contributor-list">{contributors.map((player) => <div key={player.uid}><Avatar player={player} size="sm" /><span>{player.displayName}</span><strong>{player.piecesPlaced.toLocaleString()} pieces</strong></div>)}</div></div>
         {earnedAchievements.length > 0 && <div className="earned-achievement"><Trophy size={16} /><span><small>Achievement earned</small><strong>{earnedAchievements.map((id) => achievementNames[id] || id).join(' · ')}</strong></span></div>}
         {savingCompletion && <p className="completion-saving" role="status">Saving this little win…</p>}
-        {completionError && <div><p className="form-error" role="alert">{completionError}</p>{host && <button type="button" className="text-action" disabled={savingCompletion} onClick={() => { completionHandled.current = ''; setCompletionAttempt((value) => value + 1) }}>Try saving again</button>}</div>}
-        <div className="completion-actions"><button type="button" className="button button-primary" onClick={onNextLevel} disabled={!host || !onNextLevel}><Sparkles size={16} /> Next level</button><button type="button" className="button button-outline" onClick={onBackToRoom}>Back to room</button></div>
+        {completionError && <div><p className="form-error" role="alert">{completionError}</p>{ <button type="button" className="text-action" disabled={savingCompletion} onClick={() => { completionHandled.current = ''; setCompletionAttempt((value) => value + 1) }}>Try saving again</button>}</div>}
+        <div className="completion-actions">
+          <button type="button" className="button button-primary" onClick={onNextLevel} disabled={!host || !onNextLevel}><Sparkles size={16} /> Next level</button>
+          <button type="button" className="button button-outline" onClick={restartPuzzle} disabled={!host} title={host ? undefined : 'Only the host can restart'}><RotateCw size={16} /> Play again</button>
+          <button type="button" className="button button-outline" onClick={onBackToRoom}>Back to room</button>
+        </div>
       </div>}
 
       <Modal open={confirmExit} onClose={() => setConfirmExit(false)} title="Step away from the table?" description="Your puzzle will stay here for everyone else." className="confirm-modal">

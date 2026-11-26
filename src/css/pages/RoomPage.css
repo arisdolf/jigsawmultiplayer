@@ -508,3 +508,15 @@
   background: white;
   font-size: 11px;
 }
+
+/* show the whole picture, with a soft blurred copy filling the empty sides */
+.room-scene { position: relative; isolation: isolate; overflow: hidden; min-height: 300px; }
+.room-scene::before {
+  content: "";
+  position: absolute;
+  inset: -30px;
+  z-index: -2;
+  background: var(--scene-image) center / cover no-repeat;
+  filter: blur(28px) saturate(1.1);
+}
+.room-scene-image img { object-fit: contain !important; }
