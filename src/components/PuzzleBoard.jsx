@@ -13,6 +13,15 @@ const FADE_MS = 1800 // outlines fade from the centre out to the edges
 const ZOOM_MS = 1700 // board zooms in to fill the view
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 
+const IS_TOUCH = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches
+
+// lower pixel ratio on phones = far fewer pixels to paint every frame
+function getDpr(count = 0) {
+  let dpr = Math.min(window.devicePixelRatio || 1, IS_TOUCH ? 1.5 : 2)
+  if (count > 300) dpr *= 0.75
+  return Math.max(0.75, dpr)
+}
+
 function normalizeImageRotation(value) {
   const rotation = Number(value)
   return [0, 90, 180, 270].includes(rotation) ? rotation : 0
@@ -55,6 +64,7 @@ export default function PuzzleBoard({
   onSound,
   celebrate = false,
   onCelebrationEnd,
+    fullscreen = false,
 }) {
   const canvasRef = useRef(null)
   const containerRef = useRef(null)
@@ -65,6 +75,8 @@ export default function PuzzleBoard({
   const pathCacheRef = useRef(new Map())
   const groupsRef = useRef(new Map())
   const indexRef = useRef(null)
+    const fittedRef = useRef(false)
+  const landscapeRef = useRef(null)
   const viewRef = useRef({ scale: 1, panX: 0, panY: 0 })
   const roomStatusRef = useRef(level.roomStatus)
   roomStatusRef.current = level.roomStatus
@@ -184,7 +196,7 @@ export default function PuzzleBoard({
             group: remote?.group || piece.id,
           })
         })
-
+        fittedRef.current = false
         gridRef.current = grid
         boardImageRef.current = imageCanvas
         piecesRef.current = pieceMap
@@ -309,19 +321,25 @@ export default function PuzzleBoard({
     rafRef.current = 0
   }, [])
 
-  useEffect(() => {
+   useEffect(() => {
     const canvas = canvasRef.current
     const container = containerRef.current
     if (!canvas || !container) return undefined
 
     const resize = () => {
       const rect = container.getBoundingClientRect()
-      const dpr = Math.min(window.devicePixelRatio || 1, 2) * ((gridRef.current?.count || 0) > 300 ? 0.75 : 1)
+      if (!rect.width || !rect.height) return
+      const dpr = getDpr(gridRef.current?.count || 0)
       canvas.width = Math.max(1, Math.round(rect.width * dpr))
       canvas.height = Math.max(1, Math.round(rect.height * dpr))
       canvas.style.width = `${rect.width}px`
       canvas.style.height = `${rect.height}px`
-      fitView(rect.width, rect.height)
+      const landscape = rect.width > rect.height
+      if (gridRef.current && (!fittedRef.current || landscapeRef.current !== landscape)) {
+        fitView(rect.width, rect.height)
+        fittedRef.current = true
+      }
+      landscapeRef.current = landscape
       drawRef.current?.()
     }
 
@@ -331,6 +349,19 @@ export default function PuzzleBoard({
     return () => observer.disconnect()
   }, [generation.ready])
 
+  // entering / leaving full screen: fit the board to the new size
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const container = containerRef.current
+      if (!container || !gridRef.current) return
+      const rect = container.getBoundingClientRect()
+      fitView(rect.width, rect.height)
+      fittedRef.current = true
+      drawRef.current?.()
+    }, 220)
+    return () => window.clearTimeout(timer)
+  }, [fullscreen])
+
   renderRef.current = () => {
     const canvas = canvasRef.current
     const grid = gridRef.current
@@ -339,7 +370,7 @@ export default function PuzzleBoard({
     if (!canvas || !grid || !index) return
 
     const context = canvas.getContext('2d')
-    const dpr = Math.min(window.devicePixelRatio || 1, 2) * ((grid.count || 0) > 300 ? 0.75 : 1)
+        const dpr = getDpr(grid.count || 0)
     const width = canvas.width / dpr
     const height = canvas.height / dpr
     const celebration = celebrationRef.current
@@ -410,7 +441,7 @@ export default function PuzzleBoard({
     const pieces = index.query(visible, grid.cellSize)
       .sort((a, b) => (a.placed === b.placed ? a.stackOrder - b.stackOrder : a.placed ? -1 : 1))
     let animating = false
-    const cheap = pieces.length > 120
+    const cheap = IS_TOUCH || pieces.length > 120
     pieces.forEach((piece) => {
       const path = piecePath(piece)
       context.save()
@@ -450,7 +481,7 @@ export default function PuzzleBoard({
         highlight = 1 - clamp((fadeP * 1.5 - dist) / 0.5, 0, 1)
       }
       if (highlight <= 0.01) return
-
+            if (cheap && piece.placed && !celebration && piece.width * view.scale < 12) return
       context.save()
       context.globalAlpha = highlight
       context.translate(piece.x + piece.width / 2, piece.y + piece.height / 2)
@@ -464,7 +495,7 @@ export default function PuzzleBoard({
       context.lineWidth = (active ? 2.2 : 1.1) * px
       context.strokeStyle = piece.placed ? 'rgba(41, 76, 112, 0.3)' : selected ? 'rgba(217, 104, 104, 0.9)' : 'rgba(41, 76, 112, 0.5)'
       context.shadowColor = cheap && !active ? 'transparent' : active ? 'rgba(41, 76, 112, 0.36)' : 'rgba(41, 76, 112, 0.16)'
-      context.shadowBlur = cheap && !active ? 0 : (active ? 18 : 5) * px
+            context.shadowBlur = cheap && !active ? 0 : (active ? (IS_TOUCH ? 8 : 18) : 5) * px
       context.shadowOffsetY = 2 * px
       context.stroke(path)
       context.shadowColor = 'transparent'
@@ -818,7 +849,6 @@ export default function PuzzleBoard({
   }
 
   function handlePointerDown(event) {
-    console.log('down', { ready: generation.ready, disabled, status: level.roomStatus, host: isHost })
     if (!generation.ready || disabled) return
     event.currentTarget.setPointerCapture?.(event.pointerId)
     const point = pointFromEvent(event)
@@ -860,7 +890,7 @@ export default function PuzzleBoard({
     }
 
     const piece = event.button === 0 ? hitPiece(point) : null
-    console.log('hit', piece?.id, 'remote has it:', Boolean(roomControl.piecesRef.current[piece?.id]))
+
     if (piece) {
       const someoneHasIt = groupMembers(piece).some((member) => member.movingBy && member.movingBy !== user.uid && Number(member.lockUntil) > Date.now())
       if (someoneHasIt) return
@@ -1106,6 +1136,7 @@ export default function PuzzleBoard({
         style={{ touchAction: 'none' }}
         role="application"
         tabIndex={0}
+        onContextMenu={(event) => event.preventDefault()}
         aria-label="Jigsaw puzzle board. Click or tap a piece to pick it up, move it, then click or tap again to put it down."
         aria-describedby="puzzle-keyboard-help"
         onPointerDown={handlePointerDown}

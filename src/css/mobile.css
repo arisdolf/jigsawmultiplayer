@@ -1,0 +1,169 @@
+/* ---------- all touch devices ---------- */
+html { -webkit-text-size-adjust: 100%; }
+body { -webkit-tap-highlight-color: transparent; }
+button, a, select, label, input[type="range"] { touch-action: manipulation; }
+.puzzle-canvas {
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none; touch-action: none;
+}
+body.puzzle-fullscreen { overflow: hidden; overscroll-behavior: none; }
+
+/* ---------- full screen board (portrait, landscape, desktop) ---------- */
+.game-page:fullscreen, .game-page:-webkit-full-screen {
+  width: 100%; height: 100%; overflow: auto; background: var(--blue-mist);
+}
+body .board-frame.is-fullscreen {
+  position: fixed; inset: 0; z-index: 200;
+  width: 100vw; height: 100dvh; min-height: 0; max-height: none;
+  border: 0; border-radius: 0; box-shadow: none;
+}
+body .board-frame.is-fullscreen .canvas-zoom-controls {
+  top: auto;
+  right: max(10px, env(safe-area-inset-right));
+  bottom: max(10px, env(safe-area-inset-bottom));
+}
+.fs-hud {
+  position: absolute; z-index: 6;
+  top: max(8px, env(safe-area-inset-top));
+  left: max(8px, env(safe-area-inset-left));
+  display: flex; align-items: center; gap: 6px;
+  pointer-events: none;
+}
+.fs-hud > * { pointer-events: auto; }
+.fs-btn {
+  display: grid; place-items: center; width: 44px; height: 44px;
+  border: 1px solid rgba(214,225,233,.95); border-radius: 13px;
+  color: #4f6a80; background: rgba(250,252,255,.94);
+  box-shadow: 0 5px 15px rgba(41,76,112,.14);
+}
+.fs-btn.is-on { color: #fff; background: var(--blue); }
+.fs-pill {
+  display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 13px;
+  border: 1px solid rgba(214,225,233,.95); border-radius: 13px;
+  color: #4f6a80; background: rgba(250,252,255,.94);
+  box-shadow: 0 5px 15px rgba(41,76,112,.14);
+  font-size: 13px; font-variant-numeric: tabular-nums;
+}
+.fs-pill strong { color: var(--blue); }
+.game-page.is-fullscreen .game-chat-area.is-open { z-index: 300; }
+.completion-screen { z-index: 400; }
+@media (hover: hover) and (min-height: 501px) { .fs-chat { display: none; } } /* no drawer on desktop */
+
+/* ---------- phones (portrait) ---------- */
+@media (max-width: 760px) {
+  /* 16px inputs stop iOS zooming the page when a field is focused */
+  body input, body select, body textarea { font-size: 16px; }
+
+  /* readable type (the original was 7-10px) */
+  body .section-eyebrow { font-size: 11px; }
+  body .difficulty-pill { font-size: 11px; padding: 6px 8px; }
+  body .piece-count { font-size: 12px; }
+  body .piece-count strong { font-size: 14px; }
+  body .level-details-row { font-size: 12px; }
+  body .level-image-status, body .level-number { font-size: 11px; }
+  body .hero-small-note, body .join-strip-copy div > span { font-size: 12px; }
+  body .join-strip-copy strong { font-size: 17px; }
+  body .step p { font-size: 12px; }
+  body .step strong { font-size: 17px; }
+  body .your-stats span, body .page-footer, body .page-footer button { font-size: 11px; }
+  body .table-empty, body .recent-puzzle-row small { font-size: 12px; }
+  body .levels-header p:last-child { font-size: 13px; }
+  body .difficulty-filters button { min-height: 40px; font-size: 12px; }
+  body .levels-note { font-size: 12px; }
+  body .library-search input { font-size: 16px; height: 46px; }
+  body .room-code-box > span { font-size: 10px; }
+  body .room-code-box button { font-size: 11px; min-height: 40px; }
+  body .room-heading > div > p:last-child { font-size: 13px; }
+  body .room-setup-heading .room-player-count, body .room-capacity-note { font-size: 11px; }
+  body .room-level-select > span, body .room-name-select > span { font-size: 12px; }
+  body .privacy-button strong { font-size: 13px; }
+  body .privacy-button small { font-size: 11px; }
+  body .room-member strong { font-size: 13px; }
+  body .room-member div span, body .host-badge { font-size: 10px; }
+  body .room-host-note, body .room-cozy-note { font-size: 12px; }
+  body .room-waiting-message strong { font-size: 13px; }
+  body .room-waiting-message span { font-size: 12px; }
+  body .join-page-card > p:not(.section-eyebrow) { font-size: 13px; }
+  body .join-page-card > small { font-size: 11px; }
+  body .auth-hint, body .firebase-hint { font-size: 12px; }
+  body .audio-setting-head { font-size: 14px; }
+  body .audio-setting-main p { font-size: 12px; }
+  body .audio-note { font-size: 11px; }
+  body .profile-heading p:last-child, body .profile-stat-row { font-size: 12px; }
+  body .profile-completion-list strong { font-size: 13px; }
+  body .profile-completion-list small { font-size: 11px; }
+  body .profile-achievements span { font-size: 11px; }
+  body .toast { font-size: 13px; }
+
+  /* game screen */
+  body .progress-summary > div:first-child { font-size: 12px; }
+  body .game-stat small { font-size: 11px; }
+  body .game-stat strong { font-size: 16px; }
+  body .game-state-pill { font-size: 11px; padding: 8px 10px; }
+  body .board-toolbar-note { font-size: 12px; }
+  body .board-hint-row { font-size: 11px; }
+  body .game-room-code { font-size: 11px; }
+  body .board-frame { height: 62dvh; min-height: 300px; max-height: none; }
+  body .board-column.tray-open .board-frame { height: 62dvh; }
+  body .canvas-zoom-controls span { font-size: 11px; }
+  body .canvas-zoom-controls button { font-size: 12px; }
+  body .board-paused-overlay span { font-size: 13px; }
+  body .completion-copy > p:last-child { font-size: 13px; }
+  body .completion-stats small { font-size: 10px; }
+  body .completion-stats strong { font-size: 13px; }
+  body .contributor-list > div span { font-size: 12px; }
+  body .contributor-list > div strong { font-size: 11px; }
+  body .completion-actions .button { min-height: 46px; font-size: 13px; }
+  body .earned-achievement small { font-size: 10px; }
+  body .earned-achievement strong { font-size: 12px; }
+  body .completion-photo { height: auto; }
+  body .completion-photo img { max-height: 30vh; }
+}
+
+/* ---------- phones held sideways (any width, short screen) ---------- */
+@media (pointer: coarse) and (max-height: 500px) {
+  body .topbar { position: relative; }
+  body .topbar-main { min-height: 48px; }
+  body .mobile-nav { display: none; }
+  body .desktop-nav { display: none; }
+  body .app-shell { padding-bottom: 0; }
+
+  body .game-page { width: calc(100% - 16px); padding-top: 4px; }
+  body .game-stat-strip { padding: 6px 10px; margin-bottom: 6px; gap: 10px; }
+  body .board-toolbar { min-height: 40px; padding-bottom: 4px; }
+  body .board-toolbar-note, body .board-hint-row, body .rotation-hint { display: none; }
+  body .board-tool { min-height: 40px; font-size: 12px; }
+  body .board-frame { height: calc(100dvh - 190px); min-height: 150px; max-height: none; border-width: 3px; }
+
+  body .game-content-grid { grid-template-columns: 1fr; }
+  body .game-side-panel { display: contents; }
+  body .table-friends, body .recent-activity { display: none; }
+  body .game-chat-area:not(.is-open) { display: none; }
+  body .game-chat-area.is-open {
+    position: fixed; z-index: 300; display: flex; flex-direction: column;
+    top: max(8px, env(safe-area-inset-top)); bottom: max(8px, env(safe-area-inset-bottom));
+    right: max(8px, env(safe-area-inset-right)); left: auto;
+    width: min(340px, 50vw); max-height: none; padding: 10px;
+    border: 1px solid #dce5ed; border-radius: 16px; background: #fafcff;
+    box-shadow: 0 18px 50px rgba(26,49,67,.28);
+  }
+  body .game-chat-drawer-heading { display: flex; align-items: center; justify-content: space-between; min-height: 40px; }
+  body .game-chat-drawer-heading button { width: 44px; height: 44px; border: 0; background: transparent; }
+  body .game-chat-area .chat-panel { flex: 1; min-height: 0; border: 0; background: transparent; }
+  body .game-chat-area .chat-message-list { flex: 1; max-height: none; }
+  body .game-chat-area .chat-composer input { font-size: 16px; height: 44px; }
+  body .game-chat-area .chat-composer button { width: 44px; height: 44px; }
+
+  body .completion-screen {
+    flex-direction: row; flex-wrap: wrap; justify-content: center;
+    max-height: calc(100dvh - 16px); width: min(760px, calc(100% - 24px)); padding: 14px;
+  }
+  body .completion-photo img { max-height: 28vh; }
+  body .completion-actions { flex-direction: row; }
+  body .toast { bottom: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .completion-screen, .completion-photo, .completion-copy,
+  .completion-stats, .completion-contributors, .completion-actions { animation: none !important; }
+}

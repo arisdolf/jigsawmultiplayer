@@ -1,5 +1,5 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Check, Clock3, Clipboard, Image, MessageCircle, Pause, Play, RotateCw, Share2, Sparkles, Trophy, UsersRound, X } from 'lucide-react'
+import { ArrowLeft, Check, Clock3, Clipboard, Image, MessageCircle, Pause, Play, RotateCw, Share2, Sparkles, Trophy, UsersRound, X, Maximize2, Minimize2 } from 'lucide-react'
 import Avatar from '../components/Avatar'
 import ChatPanel from '../components/ChatPanel'
 import Modal from '../components/Modal'
@@ -50,6 +50,9 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
   const totalPieces = actualPieces || Number(level?.pieceCount || 0)
   const [chatOpen, setChatOpen] = useState(false)
   const [trayOpen, setTrayOpen] = useState(false)
+   const pageRef = useRef(null)
+  const nativeFsRef = useRef(false)
+  const [fullscreen, setFullscreen] = useState(false)
   const completionKey = `${room.id || ''}:${room.game.sessionId || ''}`
   const completionHandled = useRef('')
   const handleGenerated = useCallback((grid, count) => setActualPieces(count), [])
@@ -101,6 +104,50 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
     const timer = window.setInterval(() => setElapsed(currentElapsed(room.game)), 1000)
     return () => window.clearInterval(timer)
   }, [room.game.status, room.game.elapsedSeconds, room.game.resumedAt, room.game.startedAt])
+
+  async function enterFullscreen() {
+    setFullscreen(true)
+    const el = pageRef.current
+    try {
+      const request = el?.requestFullscreen || el?.webkitRequestFullscreen
+      if (request) { await request.call(el); nativeFsRef.current = true }
+      await window.screen.orientation?.lock?.('landscape') // ignored where unsupported (iOS)
+    } catch { /* CSS full screen still works */ }
+  }
+
+  function exitFullscreen() {
+    setFullscreen(false)
+    nativeFsRef.current = false
+    try { window.screen.orientation?.unlock?.() } catch { /* ignore */ }
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+  }
+
+  // user leaves native full screen with the system gesture / back button
+  useEffect(() => {
+    const onChange = () => {
+      if (nativeFsRef.current && !document.fullscreenElement && !document.webkitFullscreenElement) {
+        nativeFsRef.current = false
+        setFullscreen(false)
+        try { window.screen.orientation?.unlock?.() } catch { /* ignore */ }
+      }
+    }
+    document.addEventListener('fullscreenchange', onChange)
+    document.addEventListener('webkitfullscreenchange', onChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange)
+      document.removeEventListener('webkitfullscreenchange', onChange)
+    }
+  }, [])
+
+  useEffect(() => {
+    document.body.classList.toggle('puzzle-fullscreen', fullscreen)
+    return () => document.body.classList.remove('puzzle-fullscreen')
+  }, [fullscreen])
+
+  useEffect(() => () => {
+    try { window.screen.orientation?.unlock?.() } catch { /* ignore */ }
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+  }, [])
 
   useEffect(() => {
   if (!level || !totalPieces || placedCount < totalPieces || completionHandled.current === completionKey) return
@@ -179,7 +226,7 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
   }))
 
   return (
-    <main className="game-page">
+        <main className={`game-page ${fullscreen ? 'is-fullscreen' : ''}`} ref={pageRef}>
       <header className="game-heading">
         <div className="game-heading-main"><div className="game-puzzle-thumbnail"><img src={level?.imageURL} alt="" /></div><div><p className="section-eyebrow">LEVEL {String(level?.order || 1).padStart(2, '0')} · {level?.difficulty}</p><h1>{level?.title || 'Shared puzzle'}</h1><div className="game-room-line"><button type="button" className="game-room-code" onClick={copyRoomCode} aria-label={`Copy room code ${room.meta?.roomCode}`}><span className="live-dot" />{codeCopied ? 'COPIED' : `ROOM ${room.meta?.roomCode}`}<Clipboard size={13} /></button><span>·</span><span>{room.players.length} playing</span></div></div></div>
         <div className="game-players-row" aria-label="Players in this room">{room.players.slice(0, 6).map((player) => <Avatar key={player.uid} player={player} size="md" isHost={room.meta.hostId === player.uid} />)}{room.players.length > 6 && <span className="avatar-overflow">+{room.players.length - 6}</span>}<button type="button" className="game-invite-button" onClick={copyInvite}><Share2 size={15} /> {copied ? 'Copied' : 'Invite'}</button></div>
@@ -197,13 +244,15 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
           <div className="board-toolbar"><div className="board-toolbar-note"><span className="board-spark"><Sparkles size={15} /></span><span>{status === 'paused' ? 'The table is paused for a moment.' : 'A little more fits every time you look.'}</span></div><div className="board-toolbar-actions">
             <button type="button" className={`board-tool ${referenceVisible ? 'active' : ''}`} aria-pressed={referenceVisible} onClick={() => setReferenceVisible((value) => !value)}><Image size={16} /> Reference</button>
             <button type="button" className={`board-tool board-chat-toggle ${chatOpen ? 'active' : ''}`} aria-expanded={chatOpen} onClick={() => setChatOpen((open) => !open)}><MessageCircle size={16} /> Chat</button>
+                        <button type="button" className="board-tool" onClick={fullscreen ? exitFullscreen : enterFullscreen}>{fullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />} {fullscreen ? 'Exit full screen' : 'Full screen'}</button>
             {level?.allowRotation && <span className="rotation-hint"><RotateCw size={14} /> Rotate pieces</span>}
             {host && status !== 'completed' && <button type="button" className="board-tool" onClick={togglePause} disabled={!boardReady}>{status === 'paused' ? <Play size={16} /> : <Pause size={16} />}{status === 'paused' ? 'Resume' : 'Pause'}</button>}
             {host && status === 'completed' && <button type="button" className="board-tool" onClick={() => setConfirmRestart(true)}><RotateCw size={16} /> Start again</button>}
             <button type="button" className="board-tool board-exit" onClick={() => setConfirmExit(true)}><X size={16} /> Leave</button>
           </div></div>
-          <div className={`board-frame ${status === 'paused' ? 'board-paused' : ''}`}>
+          <div className={`board-frame ${status === 'paused' ? 'board-paused' : ''} ${fullscreen ? 'is-fullscreen' : ''}`}>
             {currentLevel && <PuzzleBoard
+            fullscreen={fullscreen}
               level={currentLevel}
               celebrate={celebrate}
               onCelebrationEnd={() => setCelebrationDone(true)}
@@ -220,6 +269,13 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
               onReadyChange={handleReadyChange}
               onSound={audio.playSound}
             />}
+                        {fullscreen && <div className="fs-hud">
+              <button type="button" className="fs-btn" onClick={exitFullscreen} aria-label="Exit full screen"><Minimize2 size={18} /></button>
+              <div className="fs-pill"><strong>{progress}%</strong><span>{clockTime(elapsed)}</span></div>
+              <button type="button" className={`fs-btn ${referenceVisible ? 'is-on' : ''}`} onClick={() => setReferenceVisible((v) => !v)} aria-label="Toggle reference image"><Image size={18} /></button>
+              <button type="button" className={`fs-btn fs-chat ${chatOpen ? 'is-on' : ''}`} onClick={() => setChatOpen((o) => !o)} aria-label="Toggle chat"><MessageCircle size={18} /></button>
+              {host && status !== 'completed' && <button type="button" className="fs-btn" onClick={togglePause} disabled={!boardReady} aria-label={status === 'paused' ? 'Resume' : 'Pause'}>{status === 'paused' ? <Play size={18} /> : <Pause size={18} />}</button>}
+            </div>}
             {status === 'paused' && <div className="board-paused-overlay"><div className="pause-mark"><Pause size={21} /></div><strong>Just a little pause</strong><span>{host ? 'Resume when you are ready.' : 'The host will be right back.'}</span>{host && <button type="button" className="button button-primary" onClick={togglePause}><Play size={15} fill="currentColor" /> Keep going</button>}</div>}
           </div>
           <div className="board-hint-row"><span><span className="hint-dot" /> Tap a piece to pick it up, tap again to drop it{level?.allowRotation ? ', double-tap to rotate' : ''}</span><span>Zoom, pan, and find your way around</span><button type="button" onClick={() => setReferenceVisible((value) => !value)}>{referenceVisible ? 'Hide reference image' : 'Show reference image'}</button></div>
