@@ -301,3 +301,71 @@
     display: none;
   }
 }
+
+/* ===== Aligned cards: titles, descriptions and details line up across each row ===== */
+
+/* cards in a row share row heights; the old vertical gap becomes a bottom margin on each card */
+.level-grid,
+.level-grid.library-grid,
+.level-grid.home-level-grid {
+  row-gap: 0;
+  align-items: stretch;
+}
+
+.level-grid > .level-card:not(.level-card-skeleton) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: subgrid;
+  grid-row: span 4;            /* 1 image, 2 title, 3 description, 4 details */
+  row-gap: 0;
+  margin-bottom: 17px;
+}
+
+/* remove the wrappers so title, description and details become rows of the card */
+.level-grid > .level-card:not(.level-card-skeleton) .level-card-body,
+.level-grid > .level-card:not(.level-card-skeleton) .level-heading-line,
+.level-grid > .level-card:not(.level-card-skeleton) .level-heading-line > div {
+  display: contents;
+}
+
+.level-grid .level-image-button {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.level-grid .level-heading-line h3 {
+  grid-column: 1;
+  grid-row: 2;
+  padding: 16px 0 0 16px;
+}
+
+.level-grid .difficulty-pill {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: start;
+  margin: 16px 16px 0 8px;
+}
+
+.level-grid .level-heading-line p {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  min-height: 0;
+  margin: 0;
+  padding: 5px 16px 0;
+}
+
+.level-grid .level-details-row {
+  grid-column: 1 / -1;
+  grid-row: 4;
+  align-self: end;            /* details always sit on the bottom line */
+  margin: 14px 16px 0;
+  padding: 13px 0 15px;
+}
+
+@media (max-width: 760px) {
+  .level-grid > .level-card:not(.level-card-skeleton) { margin-bottom: 10px; }
+  .level-grid .level-heading-line h3 { padding: 12px 0 0 12px; }
+  .level-grid .difficulty-pill { margin: 12px 12px 0 6px; }
+  .level-grid .level-heading-line p { padding: 5px 12px 0; }
+  .level-grid .level-details-row { margin: 12px 12px 0; padding: 11px 0 12px; }
+}

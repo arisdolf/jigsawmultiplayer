@@ -22,6 +22,7 @@ import {
   leaveRoom as leaveRoomById,
   normalizeTableCode,
   tableExists,
+  deleteTable as deleteTableById,
 } from './services/roomService'
 import { setMusicScene } from './services/audioManager'
 
@@ -105,7 +106,7 @@ function storeVisit(uid, roomId) {
     return 1
   }
 }
-
+const isSharedCompletion = (record) => record?.shared === true || isSharedRoomId(record?.roomId)
 export default function App() {
   const auth = useAuth()
   const [tableCode, setTableCode] = useState('')
@@ -261,7 +262,8 @@ export default function App() {
     return () => { active = false }
   }, [auth.loading, auth.user?.uid])
 
-  const completedIds = useMemo(() => new Set(completions.map((item) => item.levelId)), [completions])
+ const soloCompletions = useMemo(() => completions.filter((item) => !isSharedCompletion(item)), [completions])
+const completedIds = useMemo(() => new Set(soloCompletions.map((item) => item.levelId)), [soloCompletions])
   const levels = useMemo(() => levelRecords.map((level) => ({
     ...level,
     isLocked: Boolean(level.isLocked || (level.requiredLevelId && !completedIds.has(level.requiredLevelId))),
@@ -272,10 +274,10 @@ export default function App() {
     [recentIds, levels],
   )
   const stats = useMemo(() => ({
-    completed: new Set(completions.map((item) => item.levelId)).size,
+   completed: new Set(soloCompletions.map((item) => item.levelId)).size,
     rooms: visits,
     pieces: completions.reduce((total, item) => total + Number(item.piecesPlaced || 0), 0),
-  }), [completions, visits])
+  }), [completions, visits, soloCompletions])
 
   const ensureUser = useCallback(async () => {
     if (auth.user) return auth.user
@@ -473,6 +475,21 @@ export default function App() {
     return code
   }, [canTogether, auth.user, requestAccount])
 
+
+  const deleteTable = useCallback(async (code) => {
+  const normalized = normalizeTableCode(code)
+  if (!normalized) throw new Error('Invalid table code.')
+  if (normalized === tableCode && roomId) {
+    // leave first so the heartbeat can't recreate the deleted room
+    try { await roomControl.leave() } catch { /* ignore */ }
+    setRoomId(null)
+  }
+  await deleteTableById(auth.user, normalized, levelRecords.map((level) => level.id))
+  if (normalized === tableCode) setTableCode('')
+  retryTableSetup()
+}, [auth.user, levelRecords, tableCode, roomId, roomControl.leave, retryTableSetup])
+
+
    const startSharedPuzzle = useCallback(async (levelId, codeOverride) => {
     if (!canTogether) throw new Error('Sign in with an account to play together.')
     const code = normalizeTableCode(codeOverride) || tableCode
@@ -644,7 +661,7 @@ export default function App() {
   }
   const libraryLoading = levelsLoading || (Boolean(auth.user) && completionsLoading)
   const homePage = <HomePage levels={levels} loading={libraryLoading} statsLoading={Boolean(auth.user) && completionsLoading} error={levelsError} user={auth.user} authLoading={auth.loading} stats={stats} recentLevels={recentLevels} recentLevelCount={recentIds.length} onPlay={playLevel} onCreateRoom={createInviteRoom} onTogether={() => navigate('together')} onBrowse={() => setScreen('levels')} onRetry={refreshLevels} />
-  const levelsPage = <LevelsPage levels={levels} loading={libraryLoading} error={levelsError} completions={completions} onPlay={playLevel} onRetry={refreshLevels} onBack={() => setScreen('home')} interactionDisabled={auth.loading} />
+  const levelsPage = <LevelsPage  levels={levels} loading={libraryLoading} error={levelsError} completions={soloCompletions} onPlay={playLevel} onRetry={refreshLevels} onBack={() => setScreen('home')} interactionDisabled={auth.loading} />
   let page
   if (auth.loading) {
     page = screen === 'home' ? homePage : screen === 'levels' ? levelsPage : <PageLoadingSkeleton screen={screen} />
@@ -670,6 +687,7 @@ export default function App() {
       onSelectTable={enterTogether}
       onJoinTable={joinTable}
       onCreateTable={createTable}
+      onDeleteTable={deleteTable}
     />
   } else if (screen === 'admin') {
     page = <AdminPage levels={levelRecords} loading={levelsLoading} isAdmin={auth.isAdmin} firebaseReady={auth.firebaseReady} onSave={saveAdminLevel} onReload={refreshLevels} />

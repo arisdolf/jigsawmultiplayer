@@ -16,7 +16,7 @@ export default function HomePage({
   authLoading = false,
   onPlay,
   onCreateRoom,
- onTogether,
+  onTogether,
   onBrowse,
   onRetry,
 }) {
@@ -76,7 +76,7 @@ export default function HomePage({
               <div className="hero-image-wash" />
               <div className="hero-art-topline"><span className="hero-art-tag"><span className="tiny-sparkle">✦</span> {recentLevel ? 'LAST PLAYED' : "TODAY'S PUZZLE"}</span><span className="hero-art-index">{String(featured.order).padStart(2, '0')} / 10</span></div>
               <div className="hero-art-caption"><div><p>{recentLevel ? 'Pick up where you left off' : 'Start with something lovely'}</p><h2>{featured.title}</h2><span>{featured.pieceCount.toLocaleString()} pieces <i /> {featured.difficulty}</span></div><button type="button" className="hero-art-play" aria-label={`Play ${featured.title}`} onClick={() => onPlay(featured)}><ArrowUpRight size={19} /></button></div>
-      
+
             </>
           ) : (
             <div className="hero-art-empty"><Puzzle size={42} /><strong>Your next table is taking shape.</strong><span>{error || 'Connect Firebase or load the local puzzle library to begin.'}</span>{error && <button type="button" className="button button-quiet" onClick={onRetry}>Try again</button>}</div>
@@ -87,9 +87,9 @@ export default function HomePage({
       </section>
 
       <section className="join-strip" aria-label="Shared table">
-  <div className="join-strip-copy"><span className="join-key-icon"><UsersRound size={17} /></span><div><strong>Our table is always set</strong><span>A shared puzzle that saves and syncs for you both.</span></div></div>
-  <button type="button" className="button button-dark" onClick={onTogether}>Open our table <ArrowRight size={16} /></button>
-</section>
+        <div className="join-strip-copy"><span className="join-key-icon"><UsersRound size={17} /></span><div><strong>Our table is always set</strong><span>A shared puzzle that saves and syncs for you both.</span></div></div>
+        <button type="button" className="button button-dark" onClick={onTogether}>Open our table <ArrowRight size={16} /></button>
+      </section>
 
       {(recentLevels.length > 1 || (loading && recentLevelCount > 1)) && (
         <section className="recent-section" aria-labelledby="recent-title">
@@ -107,7 +107,17 @@ export default function HomePage({
                 return (
                   <button key={level.id} type="button" className="recent-card" onClick={() => onPlay(level)} aria-label={`Continue ${level.title}`}>
                     <span className="recent-thumb">
-                      <img className={rotation % 180 ? 'is-quarter-turn' : undefined} src={level.imageURL} alt="" loading="lazy" style={{ '--level-image-rotation': `${rotation}deg` }} />
+                      <img
+                        className={rotation % 180 ? 'is-quarter-turn' : undefined}
+                        src={level.imageURL}
+                        alt=""
+                        loading="lazy"
+                        style={{
+                          '--level-image-rotation': `${rotation}deg`,
+                          '--level-image-shift-up': `${Number(level.imageShiftUp) || 0}px`,
+                          objectPosition: `50% calc(50% - ${Number(level.imageShiftUp) || 0}px)`,
+                        }}
+                      />
                       {level.completed && <span className="recent-badge is-done"><Check size={12} /> Finished</span>}
                     </span>
                     <span className="recent-info">
@@ -164,7 +174,11 @@ export default function HomePage({
           </div>
           {recentLevel ? (
             <button className="recent-puzzle-row" type="button" onClick={() => onPlay(recentLevel)}>
-              <img src={recentLevel.imageURL} alt="" />
+              <img
+                src={recentLevel.imageURL}
+                alt=""
+                style={{ transform: `rotate(${((Number(recentLevel.imageRotation) || 0) % 360 + 360) % 360}deg)` }}
+              />
               <span><strong>Pick up where you left off</strong><small>{recentLevel.title} · {recentLevel.pieceCount.toLocaleString()} pieces</small></span>
               <ArrowUpRight size={17} />
             </button>

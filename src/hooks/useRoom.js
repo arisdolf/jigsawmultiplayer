@@ -14,10 +14,10 @@ import {
   subscribeRoom,
   movePieces,
   releasePieces,
-  enterSharedRoom, 
+  enterSharedRoom,
   heartbeatShared,
   isSharedRoomId,
-  recordSharedCompletion, 
+  recordSharedCompletion,
   tickSharedClock
 } from '../services/roomService'
 import { playSound } from '../services/audioManager'
@@ -28,25 +28,43 @@ const emptyRoom = { id: null, meta: null, players: [], game: {}, chat: [] }
 
 
 export function useRoom(roomId, user) {
+  const userRef = useRef(user)
+userRef.current = user
+const uid = user?.uid
+
+const enterShared = useCallback((options) => enterSharedRoom({ ...options, user: options.user || userRef.current }), [])
+const completeShared = useCallback((details) => recordSharedCompletion({ ...details, roomId, uid }), [roomId, uid])
+const tickClock = useCallback(() => tickSharedClock(roomId), [roomId])
+const create = useCallback((options) => createRoom({ ...options, user: options.user || userRef.current }), [])
+const join = useCallback((options) => joinRoom({ ...options, user: options.user || userRef.current }), [])
+const leave = useCallback(() => leaveRoom(roomId, userRef.current), [roomId])
+const controlStatus = useCallback((status) => setRoomStatus(roomId, status, userRef.current), [roomId])
+const prepare = useCallback((pieces) => initializePuzzle(roomId, pieces, userRef.current), [roomId])
+const reset = useCallback((levelId) => resetRoomPuzzle(roomId, levelId, userRef.current), [roomId])
+const acquirePiece = useCallback((piece) => lockPiece(roomId, piece, userRef.current), [roomId])
+const move = useCallback((pieceId, x, y) => movePiece(roomId, pieceId, x, y, userRef.current), [roomId])
+const release = useCallback((pieceId, placement) => releasePiece(roomId, pieceId, placement, userRef.current), [roomId])
+const moveMany = useCallback((items, options) => movePieces(roomId, items, userRef.current, options), [roomId])
+const releaseMany = useCallback((items) => releasePieces(roomId, items, userRef.current), [roomId])
+const message = useCallback((text) => sendRoomMessage(roomId, userRef.current, text), [roomId])
+const complete = useCallback((details) => recordCompletion({ ...details, roomId }), [roomId])
+
   const [room, setRoom] = useState(emptyRoom)
   const [placedCount, setPlacedCount] = useState(0)
   const [activities, setActivities] = useState([])
   const piecesRef = useRef({})
   const pieceListeners = useRef(new Set())
-const enterShared = useCallback((options) => enterSharedRoom({ ...options, user: options.user || user }), [user])
-const completeShared = useCallback((details) => recordSharedCompletion({ ...details, uid: user?.uid }), [user?.uid])
-const tickClock = useCallback(() => tickSharedClock(roomId), [roomId])
   useEffect(() => {
-     // always wipe the previous room's data first
-  setRoom(emptyRoom)
-  piecesRef.current = {}
-  setPlacedCount(0)
-  setActivities([])
+    // always wipe the previous room's data first
+    setRoom(emptyRoom)
+    piecesRef.current = {}
+    setPlacedCount(0)
+    setActivities([])
 
-  if (!roomId) return undefined
+    if (!roomId) return undefined
 
     let previousPlayerIds = new Set()
-  const unsubscribe = subscribeRoom(roomId, (event) => {
+    const unsubscribe = subscribeRoom(roomId, (event) => {
       if (event.type === 'snapshot') {
         const snapshot = event.room
         piecesRef.current = snapshot.pieces || {}
@@ -87,7 +105,7 @@ const tickClock = useCallback(() => tickSharedClock(roomId), [roomId])
         previousPlayerIds.delete(event.uid)
         playSound('leave')
         setRoom((current) => ({ ...current, players: current.players.filter((player) => player.uid !== event.uid) }))
-           } else if (event.type === 'piece') {
+      } else if (event.type === 'piece') {
         const previous = piecesRef.current[event.piece.id]
         piecesRef.current[event.piece.id] = event.piece
         if (previous && previous.placed !== event.piece.placed) {
@@ -122,26 +140,14 @@ const tickClock = useCallback(() => tickSharedClock(roomId), [roomId])
   }, [])
 
   useEffect(() => {
-  if (!roomId || !user || !isSharedRoomId(roomId)) return undefined
-  const beat = () => heartbeatShared(roomId, user).catch(() => {})
-  beat()
-  const timer = setInterval(beat, 20000)
-  return () => clearInterval(timer)
-}, [roomId, user?.uid])
-  
-  const create = useCallback((options) => createRoom({ ...options, user: options.user || user }), [user])
-  const join = useCallback((options) => joinRoom({ ...options, user: options.user || user }), [user])
-  const leave = useCallback(() => leaveRoom(roomId, user), [roomId, user])
-  const controlStatus = useCallback((status) => setRoomStatus(roomId, status, user), [roomId, user])
-  const prepare = useCallback((pieces) => initializePuzzle(roomId, pieces, user), [roomId, user])
-  const reset = useCallback((levelId) => resetRoomPuzzle(roomId, levelId, user), [roomId, user])
-  const acquirePiece = useCallback((piece) => lockPiece(roomId, piece, user), [roomId, user])
-  const move = useCallback((pieceId, x, y) => movePiece(roomId, pieceId, x, y, user), [roomId, user])
-  const release = useCallback((pieceId, placement) => releasePiece(roomId, pieceId, placement, user), [roomId, user])
-  const moveMany = useCallback((items, options) => movePieces(roomId, items, user, options), [roomId, user])
-  const releaseMany = useCallback((items) => releasePieces(roomId, items, user), [roomId, user])
-  const message = useCallback((text) => sendRoomMessage(roomId, user, text), [roomId, user])
-  const complete = useCallback((details) => recordCompletion({ ...details, roomId }), [roomId])
+    if (!roomId || !user || !isSharedRoomId(roomId)) return undefined
+    const beat = () => heartbeatShared(roomId, user).catch(() => { })
+    beat()
+    const timer = setInterval(beat, 20000)
+    return () => clearInterval(timer)
+  }, [roomId, user?.uid])
+
+ 
 
   return {
     room,

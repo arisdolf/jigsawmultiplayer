@@ -68,7 +68,7 @@ export const LEVEL_CATALOG = {
     allowRotation: true,
     requires: null,
     imageRotation: 360,
-    imageShiftUp: -60,
+    imageShiftUp: -70,
   },
 
 

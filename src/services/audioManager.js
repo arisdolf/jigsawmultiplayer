@@ -6,6 +6,20 @@
 // Sound names: pickup, drop, move, rotate, correct, connect, incorrect,
 //              complete, join, leave, unlock, button
 
+
+// File name	When it plays
+// pickup	picking up a piece
+// drop	dropping a piece on the table
+// move	dragging (plays often, so keep it very short and quiet)
+// rotate	rotating a piece
+// correct	piece snaps into place
+// connect	two pieces join
+// incorrect	wrong spot
+// complete	puzzle finished
+// join / leave	player joins or leaves
+// unlock	unused for now
+// button	fallback for any sound without its own file
+// tab	tab or UI click
 const BPM = 70
 const BEAT = 60 / BPM
 const BAR = BEAT * 4
@@ -95,10 +109,12 @@ function buildGraph() {
 }
 
 function context() {
+  
   const AudioContextClass = window.AudioContext || window.webkitAudioContext
   if (!audioContext && AudioContextClass) {
-    audioContext = new AudioContextClass()
-    buildGraph()
+   audioContext = new AudioContextClass()
+buildGraph()
+void preloadSounds()
     // browsers keep audio locked until the first tap or key press
     ;['pointerdown', 'keydown'].forEach((name) => {
       window.addEventListener(name, () => {
@@ -202,85 +218,49 @@ function keys(bus, freq, start, gain, dur = 1.6) {
 
 /* ---------- sound effects ---------- */
 
-// Streak: placing pieces in quick succession climbs the scale, so a hot streak feels
-// like it is building. It only resets after COMBO_WINDOW seconds without a correct placement.
-const COMBO_WINDOW = 15 // seconds allowed between placements to keep the streak alive
-const COMBO_STEPS = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21] // major pentatonic, in semitones
-let combo = 0
-let lastCorrectAt = -100
 
-const effects = {
- pickup(bus, t) {
-  tone(bus, { freq: 380, glideTo: 640, start: t, dur: 0.09, gain: 0.08 })
-  tone(bus, { freq: 760, glideTo: 1280, start: t, dur: 0.06, gain: 0.025 })
-},
-drop(bus, t) {
-  tone(bus, { freq: 280, glideTo: 150, start: t, dur: 0.1, gain: 0.11 })
-  tone(bus, { freq: 560, type: 'triangle', start: t, dur: 0.04, gain: 0.04 })
-},
-move(bus, t) {
-  tone(bus, { freq: rand(900, 1100), start: t, dur: 0.025, gain: 0.012 })
-},
-rotate(bus, t) {
-  tone(bus, { freq: 660, start: t, dur: 0.1, gain: 0.07 })
-  tone(bus, { freq: 880, start: t + 0.06, dur: 0.12, gain: 0.07 })
-},
-correct(bus, t) {
-  combo = audioContext.currentTime - lastCorrectAt < COMBO_WINDOW ? Math.min(combo + 1, COMBO_STEPS.length - 1) : 0
-  lastCorrectAt = audioContext.currentTime
-  const freq = mtof(72) * Math.pow(2, COMBO_STEPS[combo] / 12)
-  const heat = combo / (COMBO_STEPS.length - 1)
-  tone(bus, { freq: 240, glideTo: 80, start: t, dur: 0.12, gain: 0.13 + heat * 0.05, attack: 0.002 })
-  tone(bus, { freq: freq * 0.5, glideTo: freq * 0.35, type: 'triangle', start: t, dur: 0.08, gain: 0.09, attack: 0.002 })
-  bell(bus, freq, t + 0.03, 0.04 + heat * 0.045, 0.5 + heat * 0.7)
-  if (combo >= 2) bell(bus, freq * 1.25, t + 0.07, 0.03 + heat * 0.035, 0.5 + heat * 0.7)
-  if (combo >= 4) bell(bus, freq * 1.5, t + 0.115, 0.03 + heat * 0.035, 0.6 + heat * 0.8)
-  if (combo >= 6) bell(bus, freq * 2, t + 0.16, 0.028 + heat * 0.03, 0.7 + heat * 0.9)
-},
-  // two pieces join into a group: softer two-note pluck
-  connect(bus, t) {
-    const root = pick([392, 440, 493.88])
-    keys(bus, root, t, 0.07, 0.7)
-    keys(bus, root * 1.25, t + 0.06, 0.06, 0.8)
-  },
-  // wrong spot: a soft, friendly thud (never harsh)
-incorrect(bus, t) {
-  tone(bus, { freq: 200, glideTo: 130, type: 'triangle', start: t, dur: 0.14, gain: 0.08 })
-},
-  // puzzle finished: warm rising arpeggio with shimmer
-  complete(bus, t) {
-    ;[523.25, 659.25, 783.99, 987.77, 1046.5, 1318.5, 1568].forEach((freq, index) => {
-      bell(bus, freq, t + index * 0.12, 0.07, 1.6)
-    })
-    ;[261.63, 329.63, 392, 493.88].forEach((freq) => keys(bus, freq, t, 0.04, 2.4))
-    noise(bus, { start: t + 0.3, dur: 1.4, gain: 0.02, type: 'highpass', freq: 6000, attack: 0.4 })
-  },
-  join(bus, t) {
-    keys(bus, 740, t, 0.06, 0.5)
-    keys(bus, 988, t + 0.07, 0.05, 0.7)
-  },
-  leave(bus, t) {
-    keys(bus, 440, t, 0.05, 0.5)
-    keys(bus, 330, t + 0.08, 0.045, 0.7)
-  },
-  unlock(bus, t) {
-    bell(bus, 784, t, 0.07, 0.8)
-    bell(bus, 1046.5, t + 0.09, 0.06, 1.2)
-  },
-  button(bus, t) {
-  tone(bus, { freq: 620, type: 'triangle', start: t, dur: 0.05, gain: 0.04 })
-},
-tab(bus, t) {
-  tone(bus, { freq: 523.25, start: t, dur: 0.1, gain: 0.05 })
-  tone(bus, { freq: 783.99, start: t + 0.05, dur: 0.14, gain: 0.05 })
-},
+
+const soundFiles = import.meta.glob('../assets/sounds/*.{mp3,wav,ogg,m4a}', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+})
+const soundUrls = {}
+Object.entries(soundFiles).forEach(([path, url]) => {
+  soundUrls[path.split('/').pop().replace(/\.[^.]+$/, '').toLowerCase()] = url
+})
+
+const soundBuffers = new Map()
+const SOUND_VOLUME = { move: 0.5 } // optional per-sound level, 1 = full
+
+async function preloadSounds() {
+  await Promise.all(Object.entries(soundUrls).map(async ([name, url]) => {
+    if (soundBuffers.has(name)) return
+    try {
+      const data = await (await fetch(url)).arrayBuffer()
+      soundBuffers.set(name, await audioContext.decodeAudioData(data))
+    } catch (error) {
+      console.warn(`Could not load sound "${name}"`, error)
+    }
+  }))
 }
 
 export function playSound(name) {
   const audio = context()
   if (!audio || !effectEnabled) return
-  const play = effects[name] || effects.button
-  play(masterEffects, audio.currentTime + 0.005)
+  const buffer = soundBuffers.get(name) || soundBuffers.get('button')
+  if (!buffer) return
+
+  const source = audio.createBufferSource()
+  source.buffer = buffer
+
+ 
+
+  const level = audio.createGain()
+  level.gain.value = SOUND_VOLUME[name] ?? 1
+  source.connect(level)
+  level.connect(masterEffects)
+  source.start(audio.currentTime + 0.005)
 }
 
 /* ---------- background music: generative lo-fi ---------- */

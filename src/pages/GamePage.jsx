@@ -345,6 +345,21 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onR
     ...activity,
     player: room.players.find((player) => player.uid === activity.uid),
   }))
+  
+  const imageTurn = ((Number(level?.imageRotation) || 0) % 360 + 360) % 360
+const imageQuarterTurn = imageTurn % 180 !== 0
+const referenceImageStyle = {
+  position: 'absolute',
+  top: '50%',
+  left: '50%',
+  width: imageQuarterTurn ? '100cqh' : '100%',
+  height: imageQuarterTurn ? '100cqw' : '100%',
+  objectFit: 'contain',
+  transform: `translate(-50%, -50%) rotate(${imageTurn}deg)`,
+  pointerEvents: 'none',
+  imageTurn,
+  imageQuarterTurn
+}
 
   return (
     <main className={`game-page ${fullscreen ? 'is-fullscreen' : ''}`} ref={pageRef}>
@@ -409,7 +424,7 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onR
                 </div>
                 <button type="button" className="floating-reference-close" aria-label="Close reference picture" onClick={() => setReferenceWindowOpen(false)}><X size={17} /></button>
               </header>
-              <div className="floating-reference-image"><img src={level?.imageURL} alt={level?.imageAlt || `${level?.title || 'Puzzle'} reference`} draggable="false" /><button type="button" className="floating-reference-resize" aria-label="Resize reference picture with drag or arrow keys" title="Drag to resize; use arrow keys when focused" onPointerDown={startReferenceResize} onPointerMove={moveReferenceResize} onPointerUp={stopReferenceResize} onPointerCancel={stopReferenceResize} onKeyDown={resizeReferenceByKeyboard} /></div>
+              <div className="floating-reference-image" style={{ position: 'relative', containerType: 'size' }}><img src={level?.imageURL} alt={level?.imageAlt || `${level?.title || 'Puzzle'} reference`} draggable="false" style={referenceImageStyle} /><button type="button" className="floating-reference-resize" aria-label="Resize reference picture with drag or arrow keys" title="Drag to resize; use arrow keys when focused" onPointerDown={startReferenceResize} onPointerMove={moveReferenceResize} onPointerUp={stopReferenceResize} onPointerCancel={stopReferenceResize} onKeyDown={resizeReferenceByKeyboard} /></div>
             </section>}
           </div>
           <div className="board-hint-row"><span><span className="hint-dot" /> Tap a piece to pick it up, tap again to drop it{level?.allowRotation ? ', double-tap to rotate' : ''}</span><span>Zoom, pan, and find your way around</span><button type="button" onClick={() => setReferenceVisible((value) => !value)}>{referenceVisible ? 'Hide reference image' : 'Show reference image'}</button></div>
@@ -429,7 +444,7 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onR
       {showCompletion && <div className="completion-screen" role="dialog" aria-modal="true" aria-labelledby="completion-title">
         <div className="completion-confetti" aria-hidden="true"><Sparkles /><Sparkles /><Sparkles /></div>
         <button type="button" className="completion-close" onClick={onReturnFromGame} aria-label={shared ? 'Return to our table' : 'Return to puzzle shelf'}><X size={18} /></button>
-        <div className="completion-photo"><img src={level?.imageURL} alt={level?.imageAlt || ''} /><span><Check size={16} /> Puzzle complete</span></div>
+        <div className={`completion-photo ${imageQuarterTurn ? 'is-quarter-turn' : ''}`}>  <img className={imageQuarterTurn ? 'is-quarter-turn' : undefined} src={level?.imageURL} alt={level?.imageAlt || ''} style={{ '--level-image-rotation': `${imageTurn}deg` }} /><span><Check size={16} /> Puzzle complete</span></div>
         <div className="completion-copy"><p className="section-eyebrow">A TABLE FULL OF GOOD WORK</p><h2 id="completion-title">Look what you made <em>together.</em></h2><p>Every piece found its place. Thanks for taking your time with each other.</p></div>
         <div className="completion-stats"><div><Clock3 size={15} /><span><small>Time together</small><strong>{clockTime(elapsed)}</strong></span></div><div><UsersRound size={15} /><span><small>Puzzle pals</small><strong>{contributors.length}</strong></span></div><div><Trophy size={15} /><span><small>Level finished</small><strong>{level?.order} of 10</strong></span></div></div>
         <div className="completion-contributors"><div className="completion-contributors-heading"><Sparkles size={15} /><strong>Everybody brought something</strong></div><div className="contributor-list">{contributors.map((player) => <div key={player.uid}><Avatar player={player} size="sm" /><span>{player.displayName}</span><strong>{player.piecesPlaced.toLocaleString()} pieces</strong></div>)}</div></div>

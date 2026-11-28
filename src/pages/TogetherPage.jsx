@@ -1,9 +1,9 @@
 ﻿import { useEffect, useRef, useState } from 'react'
-import { ArrowRight, Check, Clock3, Copy, Heart, KeyRound, List, Plus, Puzzle, RotateCw, Sparkles } from 'lucide-react'
+import { ArrowRight, Check, Clock3, Copy, Heart, KeyRound, List, Plus, Puzzle, RotateCw, Sparkles, Trash2 } from 'lucide-react'
 import Avatar from '../components/Avatar'
 import Modal from '../components/Modal'
 import { formatDuration } from '../components/LevelCard'
-import { getSharedHistory, getUserTableDetails } from '../services/roomService'
+import { getSharedHistoryForTables, getUserTableDetails } from '../services/roomService'
 import { copyTextWithFallback } from '../utils/sharedTable'
 import '../css/pages/TogetherPage.css'
 
@@ -30,7 +30,11 @@ export default function TogetherPage({
   onSelectTable,
   onJoinTable,
   onCreateTable,
+  onDeleteTable,
 }) {
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const { room, placedCount } = roomControl
   const [history, setHistory] = useState([])
   const [historyState, setHistoryState] = useState('loading')
@@ -85,6 +89,21 @@ export default function TogetherPage({
     setCopyFeedback('Code selected. Press Ctrl/Cmd+C or copy it.')
   }
 
+  async function confirmDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await onDeleteTable(deleteTarget.code)
+      setTableDetails((list) => list.filter((row) => row.code !== deleteTarget.code))
+      setDeleteTarget(null)
+    } catch (e) {
+      setDeleteError(e.message || 'Could not delete this table.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   async function copyRowCode(code) {
     const result = await copyTextWithFallback(code)
     setTablesNote(result === 'copied' ? '' : `Could not copy automatically. The code is ${code}.`)
@@ -121,15 +140,18 @@ export default function TogetherPage({
     }
   }
 
-  useEffect(() => {
-    if (!tableCode) return undefined
-    let active = true
-    setHistoryState('loading')
-    getSharedHistory(tableCode)
-      .then((list) => { if (active) { setHistory(list); setHistoryState('ready') } })
-      .catch(() => active && setHistoryState('error'))
-    return () => { active = false }
-  }, [tableCode])
+  const tableKey = tableCodes.join(',')
+
+useEffect(() => {
+  const codes = tableCodes.length ? tableCodes : tableCode ? [tableCode] : []
+  if (!codes.length) { setHistory([]); setHistoryState('ready'); return undefined }
+  let active = true
+  setHistoryState('loading')
+  getSharedHistoryForTables(codes)
+    .then((list) => { if (active) { setHistory(list); setHistoryState('ready') } })
+    .catch(() => active && setHistoryState('error'))
+  return () => { active = false }
+}, [tableKey, tableCode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!tablesOpen || !user) return undefined
@@ -272,6 +294,7 @@ export default function TogetherPage({
                     <strong>{record.levelTitle}</strong>
                     <small>Level {String(record.levelOrder).padStart(2, '0')} · {record.difficulty} · {record.pieceCount.toLocaleString()} pieces</small>
                     <small>{formatDuration(record.totalTime)} · {dateOf(record.completedAt)}</small>
+                    <small>Table {record.tableCode}</small>
                     <span className="recent-cta">View details <ArrowRight size={14} /></span>
                   </span>
                 </button>))}</div>}
@@ -291,9 +314,9 @@ export default function TogetherPage({
                 const isOpen = row.code === tableCode
                 return (
                   <li key={row.code} className={`tables-row${isOpen ? ' is-active' : ''}`}>
-                    <span className="tables-row-thumb">
+                    <span className="tables-row-thumb" style={rowLevel?.imageURL ? { position: 'relative', overflow: 'hidden' } : undefined}>
                       {rowLevel?.imageURL
-                        ? <img src={rowLevel.imageURL} alt="" loading="lazy" style={{ transform: `rotate(${turnOf(rowLevel.imageRotation)}deg)` }} />
+                        ? <img src={rowLevel.imageURL} alt="" loading="lazy" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: `rotate(${turnOf(rowLevel.imageRotation)}deg)` }} />
                         : <Puzzle size={20} aria-hidden="true" />}
                     </span>
                     <div className="tables-row-body">
@@ -310,9 +333,12 @@ export default function TogetherPage({
                       <button type="button" className="button button-primary" disabled={isOpen || Boolean(selectingCode)} onClick={() => void openSavedTable(row.code)}>
                         {selectingCode === row.code ? 'Opening...' : isOpen ? 'Current' : 'Open'}
                       </button>
-                      <button type="button" className="button button-outline" onClick={() => void copyRowCode(row.code)}>
-                        {rowCopied === row.code ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy</>}
-                      </button>
+                
+                      {row.owned && (
+                        <button type="button" className="button button-outline tables-delete" onClick={() => { setDeleteError(''); setDeleteTarget(row) }}>
+                          <Trash2 size={14} /> Delete
+                        </button>
+                      )}
                     </div>
                   </li>
                 )
@@ -334,6 +360,14 @@ export default function TogetherPage({
           <ul className="together-people">{(selected.players || []).map((player) => (
             <li key={player.uid}><Avatar player={player} size="sm" /><span>{player.displayName}</span><strong>{player.piecesPlaced.toLocaleString()} pieces</strong></li>))}</ul>
         </>}
+      </Modal>
+
+      <Modal open={Boolean(deleteTarget)} onClose={() => { if (!deleting) setDeleteTarget(null) }} title="Delete this table?" description={deleteTarget ? `Table ${deleteTarget.code} and all its puzzle progress, saves and chat will be deleted for everyone. This can't be undone.` : ''} className="confirm-modal">
+        {deleteError && <p className="form-error" role="alert">{deleteError}</p>}
+        <div className="together-actions">
+          <button type="button" className="button button-quiet" onClick={() => setDeleteTarget(null)} disabled={deleting}>Keep table</button>
+          <button type="button" className="button button-primary" onClick={confirmDelete} disabled={deleting}><Trash2 size={16} /> {deleting ? 'Deleting…' : 'Delete table'}</button>
+        </div>
       </Modal>
 
       <Modal open={pickerOpen} onClose={closePicker} title={pendingCode ? 'Pick a puzzle for your new table' : 'Start another puzzle?'} description={pendingCode ? `Table ${pendingCode} is reserved. Choose the first puzzle to play on it.` : 'Each puzzle keeps its own progress. Choose a level to start or continue; this board stays saved.'} className="confirm-modal">

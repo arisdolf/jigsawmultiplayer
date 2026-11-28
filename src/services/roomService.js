@@ -99,15 +99,18 @@ export async function getUserTableCodes(user) {
   if (!canPlayMultiplayer(user)) return []
   const ownCode = await getUserTableCode(user)
   let joinedCodes = []
-  if (firebaseReady) {
-    const snapshot = await get(ref(database, `userTables/${user.uid}/joinedCodes`))
-    joinedCodes = Object.keys(snapshot.val() || {})
-  } else {
-    try {
-      const saved = JSON.parse(localStorage.getItem(accountTableListKey(user.uid)) || '[]')
-      joinedCodes = Array.isArray(saved) ? saved : []
-    } catch { /* ignore unreadable local membership data */ }
-  }
+if (firebaseReady) {
+  const snapshot = await get(ref(database, `userTables/${user.uid}/joinedCodes`))
+  const codes = Object.keys(snapshot.val() || {})
+  const alive = await Promise.all(codes.map(async (item) => (await get(ref(database, `tableCodes/${item}`))).exists()))
+  joinedCodes = codes.filter((_, index) => alive[index])
+} else {
+  try {
+    const saved = JSON.parse(localStorage.getItem(accountTableListKey(user.uid)) || '[]')
+    const tables = JSON.parse(localStorage.getItem(TABLES_KEY) || '{}')
+    joinedCodes = (Array.isArray(saved) ? saved : []).filter((item) => tables[item])
+  } catch { /* ignore unreadable local membership data */ }
+}
   return [...new Set([ownCode, ...joinedCodes].map(normalizeTableCode).filter(Boolean))]
 }
 
@@ -248,9 +251,55 @@ function makePlayer(user, displayName) {
   }
 }
 
+export async function deleteTable(user, value, levelIds = []) {
+  const code = normalizeTableCode(value)
+  if (!code) throw new Error('Invalid table code.')
+  if (!canPlayMultiplayer(user)) throw new Error('Sign in with an account to delete a table.')
+  const roomIds = levelIds.map((id) => sharedLevelRoomId(code, id, SHARED_ROOM_ID))
+
+  if (!firebaseReady) {
+    const list = JSON.parse(localStorage.getItem(TABLES_KEY) || '{}')
+    if (list[code] !== user.uid) throw new Error('Only the host can delete this table.')
+    delete list[code]
+    localStorage.setItem(TABLES_KEY, JSON.stringify(list))
+    try {
+      const joined = JSON.parse(localStorage.getItem(accountTableListKey(user.uid)) || '[]')
+      localStorage.setItem(accountTableListKey(user.uid), JSON.stringify(joined.filter((item) => item !== code)))
+      if (localStorage.getItem(accountTableKey(user.uid)) === code) localStorage.removeItem(accountTableKey(user.uid))
+    } catch { /* ignore unreadable local data */ }
+    localStorage.removeItem(localActiveLevelKey(code))
+    localStorage.removeItem(`${SHARED_HISTORY_KEY}-${sharedBase(code)}`)
+    const rooms = loadLocalRooms()
+    roomIds.forEach((id) => rooms.delete(id))
+    persistLocalRooms()
+    return
+  }
+
+  const owner = (await get(ref(database, `tableCodes/${code}`))).val()
+  if (owner !== user.uid) throw new Error('Only the host can delete this table.')
+  const patch = {
+    [`tableState/${code}`]: null,
+    [`tableHistory/${code}`]: null,
+    [`userTables/${user.uid}/ownedCodes/${code}`]: null,
+    [`userTables/${user.uid}/joinedCodes/${code}`]: null,
+  }
+  roomIds.forEach((id) => { patch[`rooms/${id}`] = null })
+  const own = normalizeTableCode((await get(ref(database, `userTables/${user.uid}/ownCode`))).val())
+  if (own === code) patch[`userTables/${user.uid}/ownCode`] = null
+  await update(ref(database), patch)
+  await remove(ref(database, `tableCodes/${code}`)) // last, so ownership checks pass above
+}
+
 async function joinSharedTableClient({ user, player, tableCode, levelId, activateLevel, preferLevel }) {
-  const ownerId = (await get(ref(database, `tableCodes/${tableCode}`))).val()
-  if (!ownerId) throw new Error('No table has that code.')
+  let ownerId = (await get(ref(database, `tableCodes/${tableCode}`))).val()
+  if (!ownerId) { 
+    // repair: a table saved to this account whose code reservation is missing
+    const mine = await get(ref(database, `userTables/${user.uid}`))
+    const isMine = normalizeTableCode(mine.child('ownCode').val()) === tableCode || mine.child(`ownedCodes/${tableCode}`).exists()
+    if (!isMine) throw new Error('No table has that code.')
+    const claim = await runTransaction(ref(database, `tableCodes/${tableCode}`), (current) => (current == null ? user.uid : undefined))
+    ownerId = claim.snapshot.val() || user.uid
+  }
   const activeId = (await get(ref(database, `tableState/${tableCode}/activeLevelId`))).val()
   const chosen = (preferLevel || activateLevel || !activeId) ? levelId : activeId
   const id = sharedLevelRoomId(tableCode, chosen, SHARED_ROOM_ID)
@@ -387,7 +436,7 @@ export async function enterSharedRoom({ user, displayName, levelId, code, activa
     return room
   }
 
-    const joined = await joinSharedTableClient({ user, player, tableCode, levelId: selectedLevelId, activateLevel, preferLevel })
+  const joined = await joinSharedTableClient({ user, player, tableCode, levelId: selectedLevelId, activateLevel, preferLevel })
 
   const playerRef = ref(database, `rooms/${joined.id}/players/${user.uid}`)
   try {
@@ -424,7 +473,7 @@ export async function recordSharedCompletion({ roomId, sessionId, level, players
   const base = sharedTableOf(roomId)
   const localKey = `${SHARED_HISTORY_KEY}-${base}`
   const id = `${roomId}_${sessionId || 'session'}`
-   const record = {
+  const record = {
     id,
     roomId,
     sessionId: sessionId || null,
@@ -446,16 +495,16 @@ export async function recordSharedCompletion({ roomId, sessionId, level, players
     })),
   }
 
-   if (firebaseReady) {
+  if (firebaseReady) {
     const code = sharedTableCodeFromRoomId(roomId, SHARED_ROOM_ID)
     if (code) {
       const key = id.replace(/[.#$/\[\]]/g, '_')
       await runTransaction(ref(database, `tableHistory/${code}/${key}`), (cur) => cur || record)
     }
-    return recordCompletion({ roomId, sessionId, levelId: level.id, players, totalTime, placedCount, contributionCounts, uid })
+    return recordCompletion({shared: true, roomId, sessionId, levelId: level.id, players, totalTime, placedCount, contributionCounts, uid })
   }
-  
- 
+
+
   const saved = JSON.parse(localStorage.getItem(localKey) || '[]')
   if (!saved.some((r) => r.id === id)) {
     saved.push(record)
@@ -476,6 +525,17 @@ export async function getSharedHistory(code) {
     try { list = JSON.parse(localStorage.getItem(`${SHARED_HISTORY_KEY}-${base}`) || '[]') } catch { /* ignore */ }
   }
   return list.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))
+}
+
+export async function getSharedHistoryForTables(codes = []) {
+  const unique = [...new Set(codes.map(normalizeTableCode).filter(Boolean))]
+  const results = await Promise.allSettled(unique.map((code) => getSharedHistory(code)))
+  const merged = []
+  results.forEach((result, index) => {
+    if (result.status !== 'fulfilled') return // one failing table shouldn't hide the rest
+    result.value.forEach((record) => merged.push({ ...record, tableCode: unique[index] }))
+  })
+  return merged.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))
 }
 
 
@@ -557,7 +617,7 @@ export async function joinRoom({ code, user, displayName, resumeOwned = false })
     return room
   }
 
-    const joined = await joinRoomClient({ code: normalizedCode, user, displayName: displayName || user.displayName || 'Puzzle Pal', resumeOwned })
+  const joined = await joinRoomClient({ code: normalizedCode, user, displayName: displayName || user.displayName || 'Puzzle Pal', resumeOwned })
 
   const playerRef = ref(database, `rooms/${joined.id}/players/${user.uid}`)
   try {
@@ -614,17 +674,17 @@ export function subscribeRoom(roomId, onEvent) {
   const game = ref(database, `${roomPath}/game`)
   const pieces = ref(database, `${roomPath}/pieces`)
   const chat = ref(database, `${roomPath}/chat`)
-    
-    
+
+
 
   unsubscribers.push(onValue(base, (snapshot) => onEvent({ type: 'meta', meta: snapshot.val() })))
   unsubscribers.push(onChildAdded(players, (snapshot) => onEvent({ type: 'player', player: snapshot.val() })))
   unsubscribers.push(onChildChanged(players, (snapshot) => onEvent({ type: 'player', player: snapshot.val() })))
-    unsubscribers.push(onChildRemoved(pieces, (snapshot) => onEvent({ type: 'piece-removed', id: snapshot.key })))
+  unsubscribers.push(onChildRemoved(pieces, (snapshot) => onEvent({ type: 'piece-removed', id: snapshot.key })))
   unsubscribers.push(onChildRemoved(players, (snapshot) => onEvent({ type: 'player-left', uid: snapshot.key })))
   unsubscribers.push(onValue(game, (snapshot) => onEvent({ type: 'game', game: snapshot.val() })))
   unsubscribers.push(onChildAdded(pieces, (snapshot) => onEvent({ type: 'piece', piece: { id: snapshot.key, ...snapshot.val() } })))
-  
+
   unsubscribers.push(onChildChanged(pieces, (snapshot) => onEvent({ type: 'piece', piece: { id: snapshot.key, ...snapshot.val() } })))
   unsubscribers.push(onChildAdded(chat, (snapshot) => onEvent({ type: 'message', message: { id: snapshot.key, ...snapshot.val() } })))
   return () => unsubscribers.forEach((unsubscribe) => unsubscribe())
@@ -642,9 +702,9 @@ export async function setRoomStatus(roomId, status, user) {
     const elapsedBefore = Number(current.elapsedSeconds) || 0
     const activeSince = Number(current.resumedAt || current.startedAt) || now
     const elapsedSeconds = current.shared ? elapsedBefore
-  : status === 'paused' || status === 'completed'
-    ? elapsedBefore + Math.max(0, Math.floor((now - activeSince) / 1000))
-    : current.status === 'paused' ? elapsedBefore : 0
+      : status === 'paused' || status === 'completed'
+        ? elapsedBefore + Math.max(0, Math.floor((now - activeSince) / 1000))
+        : current.status === 'paused' ? elapsedBefore : 0
     const patch = {
       status,
       updatedAt: now,
@@ -695,16 +755,16 @@ export async function setRoomStatus(roomId, status, user) {
 }
 
 export async function initializePuzzle(roomId, pieces, user) {
- if (!firebaseReady) {
+  if (!firebaseReady) {
     const room = loadLocalRooms().get(roomId)
     if (!canManageRoom(room, user)) throw new Error('Join this table before preparing its puzzle.')
-   if (Object.keys(existingPieces).length || Object.keys(existingTargetMap).length) {
-  if (meta?.permanent !== true && meta?.hostId !== user.uid) throw new Error('Only the room host can prepare the puzzle.')
-  const removePatch = {}
-  Object.keys(existingPieces).forEach((id) => { removePatch[`rooms/${roomId}/pieces/${id}`] = null })
-  Object.keys(existingTargetMap).forEach((id) => { removePatch[`rooms/${roomId}/pieceTargets/${id}`] = null })
-  await update(ref(database), removePatch)
-}
+    if (Object.keys(existingPieces).length || Object.keys(existingTargetMap).length) {
+      if (meta?.permanent !== true && meta?.hostId !== user.uid) throw new Error('Only the room host can prepare the puzzle.')
+      const removePatch = {}
+      Object.keys(existingPieces).forEach((id) => { removePatch[`rooms/${roomId}/pieces/${id}`] = null })
+      Object.keys(existingTargetMap).forEach((id) => { removePatch[`rooms/${roomId}/pieceTargets/${id}`] = null })
+      await update(ref(database), removePatch)
+    }
     room.pieces = Object.fromEntries(pieces.map((piece) => [piece.id, { ...piece, movingBy: null, placedBy: null }]))
     room.pieceTargets = Object.fromEntries(pieces.map((piece) => [piece.id, { x: piece.targetX, y: piece.targetY }]))
     room.game.pieceCount = pieces.length
@@ -723,23 +783,17 @@ export async function initializePuzzle(roomId, pieces, user) {
   const meta = metaSnapshot.val()
   const existingPieces = existing.val() || {}
   const existingTargetMap = existingTargets.val() || {}
-  if (Object.keys(existingPieces).length === pieces.length && Object.keys(existingTargetMap).length === pieces.length) return
-  if (Object.keys(existingPieces).length || Object.keys(existingTargetMap).length) {
-     if (Object.keys(existingPieces).length || Object.keys(existingTargetMap).length) {
+  const existingCount = Object.keys(existingPieces).length
+  if (existingCount === pieces.length && Object.keys(existingTargetMap).length === pieces.length) return
+  if (existingCount && meta?.permanent === true) return // never wipe a saved shared board
+  if (existingCount || Object.keys(existingTargetMap).length) {
     if (meta?.permanent !== true && meta?.hostId !== user.uid) throw new Error('Only the room host can prepare the puzzle.')
     const removePatch = {}
     Object.keys(existingPieces).forEach((id) => { removePatch[`rooms/${roomId}/pieces/${id}`] = null })
     Object.keys(existingTargetMap).forEach((id) => { removePatch[`rooms/${roomId}/pieceTargets/${id}`] = null })
     await update(ref(database), removePatch)
-  }else {
-      if (meta?.hostId !== user.uid) throw new Error('Only the room host can prepare the puzzle.')
-      const removePatch = {}
-      Object.keys(existingPieces).forEach((id) => { removePatch[`rooms/${roomId}/pieces/${id}`] = null })
-      Object.keys(existingTargetMap).forEach((id) => { removePatch[`rooms/${roomId}/pieceTargets/${id}`] = null })
-      await update(ref(database), removePatch)
-    }
   }
-  
+
   const patch = {}
   for (const piece of pieces) {
     patch[`rooms/${roomId}/pieces/${piece.id}`] = {
@@ -765,8 +819,8 @@ export async function resetRoomPuzzle(roomId, levelId, user) {
   if (firebaseReady) {
     const metaSnapshot = await get(ref(database, `rooms/${roomId}/meta`))
     const meta = metaSnapshot.val()
-        if (meta?.permanent !== true && meta?.hostId !== user.uid) throw new Error('Only the room host can reset the puzzle.')
-  
+    if (meta?.permanent !== true && meta?.hostId !== user.uid) throw new Error('Only the room host can reset the puzzle.')
+
     const [piecesSnapshot, targetsSnapshot] = await Promise.all([
       get(ref(database, `rooms/${roomId}/pieces`)),
       get(ref(database, `rooms/${roomId}/pieceTargets`)),
@@ -792,7 +846,7 @@ export async function resetRoomPuzzle(roomId, levelId, user) {
       [`rooms/${roomId}/game/updatedAt`]: updatedAt,
     })
     await update(ref(database), resetPatch)
-        if (meta?.permanent === true && meta.tableCode) {
+    if (meta?.permanent === true && meta.tableCode) {
       await update(ref(database, `tableState/${meta.tableCode}`), { activeLevelId: levelId, updatedAt })
     }
     return
@@ -805,8 +859,8 @@ export async function resetRoomPuzzle(roomId, levelId, user) {
   const updatedAt = Date.now()
   Object.assign(room.meta, { levelId, status: 'waiting', updatedAt })
   Object.assign(room.game, {
-      levelId, status: 'waiting', progress: 0, pieceCount: 0, elapsedSeconds: 0,
-      startedAt: null, resumedAt: null, pausedAt: null, completedAt: null, sessionId: null, updatedAt,
+    levelId, status: 'waiting', progress: 0, pieceCount: 0, elapsedSeconds: 0,
+    startedAt: null, resumedAt: null, pausedAt: null, completedAt: null, sessionId: null, updatedAt,
   })
   persistLocalRooms()
   publishLocal(roomId, { type: 'meta', meta: room.meta })
@@ -834,7 +888,7 @@ export async function lockPiece(roomId, piece, user) {
 }
 
 export async function movePiece(roomId, pieceId, x, y, user) {
-  
+
   const patch = { x, y, lockUntil: Date.now() + 12000, updatedAt: Date.now() }
   if (!firebaseReady) {
     const room = loadLocalRooms().get(roomId)
@@ -928,7 +982,7 @@ export async function leaveRoom(roomId, user) {
   publishLocal(roomId, { type: 'player-left', uid: user.uid })
 }
 
-export async function recordCompletion({ roomId, sessionId, levelId, players, totalTime, placedCount, contributionCounts = {}, uid }) {
+export async function recordCompletion({ shared = false, roomId, sessionId, levelId, players, totalTime, placedCount, contributionCounts = {}, uid }) {
   const completion = {
     roomId,
     levelId,
@@ -1012,12 +1066,12 @@ export async function movePieces(roomId, items, user, { keepAlive = false } = {}
     items.forEach(({ id, x, y, rotation }) => {
       const current = room.pieces[id]
       if (!current) return
-            Object.assign(current, { x, y, rotation: Number(rotation) || 0, movingBy: user.uid, lockUntil: now + 12000, updatedAt: now })
+      Object.assign(current, { x, y, rotation: Number(rotation) || 0, movingBy: user.uid, lockUntil: now + 12000, updatedAt: now })
       publishLocal(roomId, { type: 'piece', piece: { id, ...current } })
     })
     return
   }
-    const patch = {}
+  const patch = {}
   items.forEach(({ id, x, y, rotation }) => {
     const base = `rooms/${roomId}/pieces/${id}`
     patch[`${base}/x`] = Math.round(x)

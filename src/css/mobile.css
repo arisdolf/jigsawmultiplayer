@@ -310,3 +310,7 @@ body .board-frame.is-fullscreen .canvas-zoom-controls {
 }
 
 .floating-note { display: none; }
+
+@media (max-width: 760px) {
+  body .completion-photo { height: clamp(140px, 30vh, 240px); }
+}

@@ -1070,3 +1070,81 @@
   aspect-ratio: 1 / 1;
   border-radius: 50%;
 }
+
+/* Normal images: the box wraps the picture, no empty bars */
+.completion-photo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: auto;
+  overflow: hidden;
+}
+
+.completion-photo img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 42vh;
+  object-fit: contain;
+  rotate: var(--level-image-rotation, 0deg);
+}
+
+/* Sideways images (90° / 270°): need a fixed box so the rotated image fits */
+.completion-photo.is-quarter-turn {
+  container-type: size;
+  height: clamp(160px, 34vh, 300px);
+}
+
+.completion-photo.is-quarter-turn img {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 100cqh;
+  height: 100cqw;
+  max-width: none;
+  max-height: none;
+}
+
+/* Normal images: box hugs the picture */
+.completion-photo:not(.is-quarter-turn) {
+  container-type: normal;
+  display: block;
+  width: 100%;
+  height: auto;
+  background: transparent;
+  line-height: 0;
+}
+
+.completion-photo:not(.is-quarter-turn) img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 42vh;
+  object-fit: contain;
+  rotate: none;
+}
+
+/* Sideways images keep the fixed box */
+.completion-photo.is-quarter-turn {
+  container-type: size;
+  height: clamp(160px, 34vh, 300px);
+}
+
+/* The X: stays visible while the modal scrolls, no longer overlaps the picture */
+.completion-close {
+  position: sticky;
+  top: 12px;
+  align-self: flex-end;
+  flex: none;
+  z-index: 5;
+  margin: -12px -12px -32px 0;
+  width: 32px;
+  height: 32px;
+}
+
+.completion-screen {
+  padding-top: 52px;
+}

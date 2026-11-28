@@ -149,3 +149,24 @@
   .page-loading-dot { animation: none; }
   .page-loading .data-skeleton { animation: none; }
 }
+
+.loading-together-table,
+.loading-profile-card,
+.loading-admin-list,
+.loading-admin-editor,
+.loading-admin-toolbar,
+.loading-game-stats,
+.loading-side-card {
+  border-color: var(--border-default);
+  background: var(--surface-card);
+}
+
+.loading-admin-preview,
+.loading-completion-list .loading-bone,
+.loading-upload {
+  border-color: var(--border-default);
+}
+
+.loading-board {
+  border-color: var(--surface-card);
+}

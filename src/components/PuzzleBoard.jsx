@@ -12,7 +12,10 @@ const TAP_SLOP = 6
 const FADE_MS = 1800 // outlines fade from the centre out to the edges
 const ZOOM_MS = 1700 // board zooms in to fill the view
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
-
+const LIFT_MS = 40  // pick-up lift
+const POP_MS = 150    // connect / correct pop
+const SETTLE_MS = 80 // drop settle
+const easeOutBack = (t) => 1 + 2.70158 * Math.pow(t - 1, 3) + 1.70158 * Math.pow(t - 1, 2)
 const IS_TOUCH = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches
 
 // lower pixel ratio on phones = far fewer pixels to paint every frame
@@ -28,18 +31,22 @@ function normalizeImageRotation(value) {
 }
 
 function makeBoardImage(source, grid, rotation = 0) {
-  const canvas = document.createElement('canvas')
-  canvas.width = grid.width
-  canvas.height = grid.height
-  const context = canvas.getContext('2d', { alpha: false })
   const quarterTurn = rotation % 180 !== 0
   const orientedWidth = quarterTurn ? source.naturalHeight : source.naturalWidth
   const orientedHeight = quarterTurn ? source.naturalWidth : source.naturalHeight
   const ratio = Math.max(grid.width / orientedWidth, grid.height / orientedHeight)
-  const width = source.naturalWidth * ratio
-  const height = source.naturalHeight * ratio
+  // keep the photo's real detail (up to a safe canvas size) instead of the small grid size
+  const maxSide = IS_TOUCH ? 3072 : 4096
+  const quality = clamp(Math.min(1 / ratio, maxSide / Math.max(grid.width, grid.height)), 1, 4)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(grid.width * quality)
+  canvas.height = Math.round(grid.height * quality)
+  const context = canvas.getContext('2d', { alpha: false })
+  context.imageSmoothingQuality = 'high'
+  const width = source.naturalWidth * ratio * quality
+  const height = source.naturalHeight * ratio * quality
   context.save()
-  context.translate(grid.width / 2, grid.height / 2)
+  context.translate(canvas.width / 2, canvas.height / 2)
   context.rotate((rotation * Math.PI) / 180)
   context.drawImage(source, -width / 2, -height / 2, width, height)
   context.restore()
@@ -72,6 +79,7 @@ export default function PuzzleBoard({
   const workerRef = useRef(null)
   const gridRef = useRef(null)
   const boardImageRef = useRef(null)
+  const settlingRef = useRef(new Set())
   const piecesRef = useRef(new Map())
   const pathCacheRef = useRef(new Map())
   const groupsRef = useRef(new Map())
@@ -211,8 +219,11 @@ export default function PuzzleBoard({
 
         // sprites: sized so the biggest stays under ~190px
         const margin = grid.cellSize * 0.42
-        const scale = Math.min(2, 190 / (grid.cellSize + margin * 2))
-        const layerScale = Math.min(IS_TOUCH ? 1 : 1.6, 3000 / Math.max(grid.width, grid.height))
+        const side = grid.cellSize + margin * 2
+        const budget = IS_TOUCH ? 14e6 : 40e6 // total sprite pixels, keeps memory safe on big puzzles
+        const density = imageCanvas.width / grid.width
+        const scale = clamp(Math.sqrt(budget / pieceMap.size) / side, 0.5, Math.min(3, density))
+        const layerScale = Math.min(scale, IS_TOUCH ? 2 : 3, (IS_TOUCH ? 3072 : 4096) / Math.max(grid.width, grid.height))
         spriteInfoRef.current = { margin, scale, layerScale }
         spritesRef.current = new Map()
         placedLayerRef.current = null
@@ -401,7 +412,7 @@ export default function PuzzleBoard({
     if (!canvas || !grid || !index) return
 
     const context = canvas.getContext('2d')
-    context.imageSmoothingQuality = IS_TOUCH ? 'low' : 'medium'
+    context.imageSmoothingQuality = IS_TOUCH ? 'medium' : 'high'
     const dpr = getDpr(grid.count || 0)
     const width = canvas.width / dpr
     const height = canvas.height / dpr
@@ -465,10 +476,22 @@ export default function PuzzleBoard({
       context.restore()
     }
 
+    const frameNow = Date.now()
+    const heldDrag = dragRef.current
+    const heldSet = heldDrag?.kind === 'piece' ? new Set(heldDrag.members.map((m) => m.piece)) : null
+    let lifting = false
     live.forEach((piece) => {
       const selected = piece === selectedPieceRef.current
-      const active = selected || piece === dragRef.current?.piece
-      drawSprite(context, piece, px, active, selected)
+      const active = selected || Boolean(heldSet?.has(piece))
+      let scale = 1
+      let lift = 1
+      if (active) {
+        const t = clamp((frameNow - (piece.liftAt || 0)) / LIFT_MS, 0, 1)
+        if (t < 1) lifting = true
+        scale = 1 + 0.08 * easeOutBack(t)
+        lift = 1 - Math.pow(1 - t, 3)
+      }
+      drawSprite(context, piece, px, active, selected, scale, lift)
 
       if (piece.movingBy && piece.movingBy !== user?.uid && piece.id === (piece.group || piece.id) && piece.width * view.scale > 46) {
         const playerName = players.find((player) => player.uid === piece.movingBy)?.displayName || 'Puzzle Pal'
@@ -489,11 +512,42 @@ export default function PuzzleBoard({
     // green "click" glow on pieces that just snapped in or joined
     let animating = false
     const now = Date.now()
+
+    // wrong drop: the piece settles back down onto the table
+    settlingRef.current.forEach((piece) => {
+      const t = (now - (piece.settleAt || 0)) / SETTLE_MS
+      if (t >= 1 || piece.placed || heldSet?.has(piece)) { settlingRef.current.delete(piece); return }
+      animating = true
+      if (celebration) return
+      const k = 1 - t
+      drawSprite(context, piece, px, true, false, 1 + 0.07 * k * k, k)
+    })
+
     flashingRef.current.forEach((piece) => {
-      const glow = Math.max(0, 1 - (now - (piece.flashAt || 0)) / 1400)
+     const glow = Math.max(0, 1 - (now - (piece.flashAt || 0)) / 700)
       if (glow <= 0) { flashingRef.current.delete(piece); return }
       animating = true
       if (celebration) return
+
+      // pop: a quick grow-and-settle, bigger when the piece locks into the board
+      const popT = (now - (piece.flashAt || 0)) / POP_MS
+      if (popT < 1) {
+        const pulse = Math.sin(Math.PI * popT)
+        drawSprite(context, piece, px, true, false, 1 + (piece.placed ? 0.12 : 0.06) * pulse, pulse)
+        if (piece.placed) {
+          // expanding ring
+          context.save()
+          context.translate(piece.x + piece.width / 2, piece.y + piece.height / 2)
+          context.rotate(((piece.rotation || 0) * Math.PI) / 180)
+          context.scale(1 + 0.35 * popT, 1 + 0.35 * popT)
+          context.translate(-piece.width / 2, -piece.height / 2)
+          context.strokeStyle = `rgba(46, 176, 102, ${0.6 * (1 - popT)})`
+          context.lineWidth = 3 * px
+          context.stroke(piecePath(piece))
+          context.restore()
+        }
+      }
+
       context.save()
       context.translate(piece.x + piece.width / 2, piece.y + piece.height / 2)
       context.rotate(((piece.rotation || 0) * Math.PI) / 180)
@@ -509,7 +563,7 @@ export default function PuzzleBoard({
     })
 
     const celebrating = celebration && Date.now() - celebration.start < FADE_MS + ZOOM_MS + 60
-    if ((animating || celebrating) && !rafRef.current) {
+    if ((animating || celebrating || lifting) && !rafRef.current) {
       rafRef.current = requestAnimationFrame(() => { rafRef.current = 0; renderRef.current?.() })
     }
   }
@@ -580,7 +634,7 @@ export default function PuzzleBoard({
     if (placedLayerRef.current) context.drawImage(placedLayerRef.current, 0, 0, grid.width, grid.height)
   }
 
-  function drawSprite(context, piece, px, active = false, selected = false) {
+  function drawSprite(context, piece, px, active = false, selected = false, scale = 1, lift = 1) {
     const sprite = spritesRef.current.get(piece.id)
     if (!sprite) return
     const { margin } = spriteInfoRef.current
@@ -588,10 +642,11 @@ export default function PuzzleBoard({
     context.save()
     context.translate(piece.x + piece.width / 2, piece.y + piece.height / 2)
     context.rotate(((piece.rotation || 0) * Math.PI) / 180)
+    if (scale !== 1) context.scale(scale, scale)
     if (active) {
       context.shadowColor = 'rgba(41, 76, 112, 0.36)'
-      context.shadowBlur = (IS_TOUCH ? 6 : 16) * px
-      context.shadowOffsetY = 3 * px
+      context.shadowBlur = (IS_TOUCH ? 8 : 20) * px * lift
+      context.shadowOffsetY = 4 * px * lift
     }
     context.drawImage(sprite, -piece.width / 2 - margin, -piece.height / 2 - margin, size, size)
     if (selected) {
@@ -648,7 +703,9 @@ export default function PuzzleBoard({
 
     g.save()
     g.clip(path)
-    g.drawImage(image, piece.targetX - margin, piece.targetY - margin, src, src, -margin, -margin, src, src)
+    const q = image.width / grid.width
+    g.imageSmoothingQuality = 'high'
+    g.drawImage(image, (piece.targetX - margin) * q, (piece.targetY - margin) * q, src * q, src * q, -margin, -margin, src, src)
     // soft inner highlight + shade, for the cut-cardboard look
     const w = Math.max(1.2 / scale, grid.cellSize * 0.018)
     g.strokeStyle = 'rgba(255,255,255,0.5)'
@@ -863,6 +920,7 @@ export default function PuzzleBoard({
       lock: null,
     }
     members.forEach((member) => { member.stackOrder = stamp })
+    members.forEach((member) => { member.stackOrder = stamp; member.liftAt = stamp })
     selectedPieceRef.current = piece
     dragRef.current = drag
     markDirty()
@@ -950,6 +1008,10 @@ export default function PuzzleBoard({
     }
     members.forEach((member) => indexRef.current.update(member))
     members.forEach(syncPlaced)
+    if (!correct) {
+      const settleStamp = Date.now()
+      members.forEach((member) => { member.settleAt = settleStamp; settlingRef.current.add(member) })
+    }
     drawRef.current?.()
 
     const locked = await drag.lock
