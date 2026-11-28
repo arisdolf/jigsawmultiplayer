@@ -2,46 +2,100 @@
   "rules": {
     ".read": false,
     ".write": false,
+
+    "tableCodes": {
+      "$code": {
+        ".read": "auth != null && auth.token.firebase.sign_in_provider != 'anonymous'",
+        ".write": "auth != null && auth.token.firebase.sign_in_provider != 'anonymous' && ((!data.exists() && newData.val() == auth.uid) || (data.val() == auth.uid && newData.val() == auth.uid))",
+        ".validate": "$code.matches(/^[A-HJ-NP-Z2-9]{6}$/) && newData.isString()"
+      }
+    },
+
+    "userTables": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid && auth.token.firebase.sign_in_provider != 'anonymous'",
+        "ownCode": {
+          ".write": "auth != null && auth.uid == $uid && auth.token.firebase.sign_in_provider != 'anonymous' && (!data.exists() || data.val() == newData.val()) && root.child('tableCodes').child(newData.val()).val() == auth.uid",
+          ".validate": "newData.isString() && newData.val().matches(/^[A-HJ-NP-Z2-9]{6}$/)"
+        },
+        "joinedCodes": {
+          "$code": {
+            ".write": "auth != null && auth.uid == $uid && auth.token.firebase.sign_in_provider != 'anonymous' && newData.val() == true && root.child('tableCodes').child($code).exists()",
+            ".validate": "$code.matches(/^[A-HJ-NP-Z2-9]{6}$/) && newData.val() == true"
+          }
+        }
+      }
+    },
+
+    "tableState": {
+      "$code": {
+        ".read": "auth != null && auth.token.firebase.sign_in_provider != 'anonymous' && root.child('tableCodes').child($code).exists()",
+        ".write": "auth != null && auth.token.firebase.sign_in_provider != 'anonymous' && root.child('tableCodes').child($code).exists()",
+        ".validate": "newData.hasChildren(['activeLevelId']) && newData.child('activeLevelId').isString()"
+      }
+    },
+
+    "tableHistory": {
+      "$code": {
+        ".read": "auth != null && auth.token.firebase.sign_in_provider != 'anonymous' && root.child('tableCodes').child($code).exists()",
+        "$historyId": {
+          ".write": "auth != null && auth.token.firebase.sign_in_provider != 'anonymous' && root.child('tableCodes').child($code).exists() && newData.exists() && (!data.exists() || data.child('id').val() == newData.child('id').val())",
+          ".validate": "newData.hasChildren(['id', 'levelId', 'totalTime', 'completedAt'])"
+        }
+      }
+    },
+
     "roomCodes": {
       "$code": {
         ".read": "auth != null",
-        ".write": "auth != null && ((!data.exists() && newData.isString() && newData.val().length == 20) || (data.exists() && !newData.exists() && root.child('rooms').child(data.val()).child('meta').child('hostId').val() == auth.uid))"
+        ".write": "auth != null && ((!data.exists() && newData.isString() && newData.val().length == 20) || (data.exists() && !newData.exists() && root.child('rooms').child(data.val()).child('meta').child('hostId').val() == auth.uid))",
+        ".validate": "$code.matches(/^[A-HJ-NP-Z2-9]{6}$/) && newData.isString() && newData.val().length == 20"
       }
     },
+
     "rooms": {
       "$roomId": {
         "meta": {
-          ".read": "auth != null && (data.child('isPublic').val() == true || root.child('rooms').child($roomId).child('players').child(auth.uid).exists())",
-          ".write": "auth != null && ((!data.exists() && newData.child('hostId').val() == auth.uid) || data.child('hostId').val() == auth.uid)",
-          ".validate": "newData.hasChildren(['roomCode', 'hostId', 'levelId', 'status', 'isPublic', 'createdAt', 'updatedAt']) && newData.child('roomCode').isString() && newData.child('roomCode').val().matches(/^[A-Z2-9]{6}$/) && newData.child('hostId').isString() && newData.child('levelId').isString() && (newData.child('status').val() == 'waiting' || newData.child('status').val() == 'playing' || newData.child('status').val() == 'paused' || newData.child('status').val() == 'completed' || newData.child('status').val() == 'closed') && newData.child('isPublic').isBoolean() && newData.child('createdAt').isNumber() && newData.child('updatedAt').isNumber()"
+          ".read": "auth != null",
+          ".write": "auth != null && ((!data.exists() && newData.child('hostId').val() == auth.uid && newData.child('permanent').val() != true) || (data.exists() && data.child('permanent').val() != true && newData.child('permanent').val() != true && (data.child('hostId').val() == auth.uid || (root.child('rooms').child($roomId).child('players').child(auth.uid).exists() && !root.child('rooms').child($roomId).child('players').child(data.child('hostId').val()).exists()))) || (auth.token.firebase.sign_in_provider != 'anonymous' && newData.child('permanent').val() == true && newData.child('tableCode').isString() && root.child('tableCodes').child(newData.child('tableCode').val()).exists() && (data.exists() ? (data.child('permanent').val() == true && data.child('tableCode').val() == newData.child('tableCode').val()) : root.child('tableCodes').child(newData.child('tableCode').val()).val() == newData.child('ownerId').val())))",
+          ".validate": "newData.hasChildren(['roomCode', 'hostId', 'levelId', 'status', 'isPublic', 'createdAt', 'updatedAt']) && newData.child('roomCode').isString() && newData.child('roomCode').val().matches(/^[A-HJ-NP-Z2-9]{6}$/) && newData.child('hostId').isString() && newData.child('levelId').isString() && (newData.child('status').val() == 'waiting' || newData.child('status').val() == 'playing' || newData.child('status').val() == 'paused' || newData.child('status').val() == 'completed' || newData.child('status').val() == 'closed') && newData.child('isPublic').isBoolean() && newData.child('createdAt').isNumber() && newData.child('updatedAt').isNumber() && (!newData.child('permanent').exists() || (newData.child('permanent').val() == true && newData.child('tableCode').val() == newData.child('roomCode').val() && newData.child('ownerId').isString())) && (!newData.child('multiplayerEnabled').exists() || (newData.child('multiplayerEnabled').isBoolean() && (newData.child('multiplayerEnabled').val() != true || auth.token.firebase.sign_in_provider != 'anonymous')))"
         },
+
         "players": {
+          ".read": "auth != null",
+          ".write": "auth != null && root.child('rooms').child($roomId).child('meta').exists() && newData.child(auth.uid).child('uid').val() == auth.uid && (auth.token.firebase.sign_in_provider != 'anonymous' || root.child('rooms').child($roomId).child('meta').child('hostId').val() == auth.uid)",
           "$uid": {
-            ".read": "auth != null && (root.child('rooms').child($roomId).child('meta').child('isPublic').val() == true || root.child('rooms').child($roomId).child('players').child(auth.uid).exists())",
             ".write": "auth != null && ((($uid == auth.uid) && data.exists()) || root.child('rooms').child($roomId).child('meta').child('hostId').val() == auth.uid)",
-            ".validate": "!newData.exists() || (newData.child('uid').val() == $uid && newData.child('displayName').isString() && newData.child('displayName').val().length > 0 && newData.child('displayName').val().length <= 48 && newData.child('joinedAt').isNumber() && (root.child('rooms').child($roomId).child('meta').child('isPublic').val() == true || $uid == root.child('rooms').child($roomId).child('meta').child('hostId').val() || newData.child('joinedWithCode').val() == root.child('rooms').child($roomId).child('meta').child('roomCode').val() || data.child('joinedWithCode').val() == root.child('rooms').child($roomId).child('meta').child('roomCode').val()))"
+            ".validate": "!newData.exists() || (newData.child('uid').val() == $uid && newData.child('displayName').isString() && newData.child('displayName').val().length > 0 && newData.child('displayName').val().length <= 100 && newData.child('joinedAt').isNumber())"
           }
         },
+
         "game": {
-          ".read": "auth != null && root.child('rooms').child($roomId).child('players').child(auth.uid).exists()",
-          ".write": "auth != null && root.child('rooms').child($roomId).child('meta').child('hostId').val() == auth.uid",
+          ".read": "auth != null",
+          ".write": "auth != null && ((root.child('rooms').child($roomId).child('meta').child('permanent').val() != true && root.child('rooms').child($roomId).child('meta').child('hostId').val() == auth.uid) || (root.child('rooms').child($roomId).child('meta').child('permanent').val() == true && auth.token.firebase.sign_in_provider != 'anonymous'))",
           ".validate": "newData.hasChildren(['progress']) && newData.child('progress').isNumber() && newData.child('progress').val() >= 0"
         },
+
         "pieces": {
+          ".read": "auth != null && root.child('rooms').child($roomId).child('players').child(auth.uid).exists()",
           "$pieceId": {
             ".read": "auth != null && root.child('rooms').child($roomId).child('players').child(auth.uid).exists()",
-            ".write": "auth != null && root.child('rooms').child($roomId).child('players').child(auth.uid).exists() && (data.child('placed').val() != true || root.child('rooms').child($roomId).child('meta').child('hostId').val() == auth.uid) && ((!data.exists() && root.child('rooms').child($roomId).child('meta').child('hostId').val() == auth.uid) || data.child('movingBy').val() == auth.uid || !data.child('movingBy').exists() || data.child('lockUntil').val() < now || newData.child('movingBy').val() == auth.uid)",
-            ".validate": "newData.hasChildren(['x', 'y', 'placed', 'rotation', 'movingBy', 'lockUntil', 'placedBy', 'updatedAt']) && newData.child('x').isNumber() && newData.child('y').isNumber() && newData.child('placed').isBoolean() && newData.child('rotation').isNumber() && (newData.child('rotation').val() == 0 || newData.child('rotation').val() == 90 || newData.child('rotation').val() == 180 || newData.child('rotation').val() == 270) && newData.child('lockUntil').isNumber() && newData.child('updatedAt').isNumber() && (newData.child('placed').val() == true ? (newData.child('placedBy').val() == auth.uid && newData.child('rotation').val() == 0 && newData.child('x').val() >= root.child('rooms').child($roomId).child('pieceTargets').child($pieceId).child('x').val() - 2 && newData.child('x').val() <= root.child('rooms').child($roomId).child('pieceTargets').child($pieceId).child('x').val() + 2 && newData.child('y').val() >= root.child('rooms').child($roomId).child('pieceTargets').child($pieceId).child('y').val() - 2 && newData.child('y').val() <= root.child('rooms').child($roomId).child('pieceTargets').child($pieceId).child('y').val() + 2) : newData.child('placedBy').val() == null)"
+            ".write": "auth != null && root.child('rooms').child($roomId).child('players').child(auth.uid).exists() && (newData.exists() || root.child('rooms').child($roomId).child('meta').child('hostId').val() == auth.uid || root.child('rooms').child($roomId).child('meta').child('permanent').val() == true) && (data.child('placed').val() != true || root.child('rooms').child($roomId).child('meta').child('hostId').val() == auth.uid || (root.child('rooms').child($roomId).child('meta').child('permanent').val() == true && !newData.exists())) && ((!data.exists() && (root.child('rooms').child($roomId).child('meta').child('hostId').val() == auth.uid || root.child('rooms').child($roomId).child('meta').child('permanent').val() == true)) || data.child('movingBy').val() == auth.uid || !data.child('movingBy').exists() || data.child('lockUntil').val() < now || newData.child('movingBy').val() == auth.uid || !newData.exists())",
+            ".validate": "newData.hasChildren(['x', 'y', 'placed', 'rotation', 'lockUntil', 'updatedAt']) && newData.child('x').isNumber() && newData.child('y').isNumber() && newData.child('placed').isBoolean() && newData.child('rotation').isNumber() && (newData.child('rotation').val() == 0 || newData.child('rotation').val() == 90 || newData.child('rotation').val() == 180 || newData.child('rotation').val() == 270) && newData.child('lockUntil').isNumber() && newData.child('updatedAt').isNumber() && (newData.child('placed').val() == true ? (newData.child('placedBy').val() == auth.uid && newData.child('rotation').val() == 0 && newData.child('x').val() >= root.child('rooms').child($roomId).child('pieceTargets').child($pieceId).child('x').val() - 2 && newData.child('x').val() <= root.child('rooms').child($roomId).child('pieceTargets').child($pieceId).child('x').val() + 2 && newData.child('y').val() >= root.child('rooms').child($roomId).child('pieceTargets').child($pieceId).child('y').val() - 2 && newData.child('y').val() <= root.child('rooms').child($roomId).child('pieceTargets').child($pieceId).child('y').val() + 2) : newData.child('placedBy').val() == null)"
           }
         },
+
         "pieceTargets": {
+          ".read": "auth != null && root.child('rooms').child($roomId).child('players').child(auth.uid).exists()",
           "$pieceId": {
             ".read": "auth != null && root.child('rooms').child($roomId).child('players').child(auth.uid).exists()",
-            ".write": "auth != null && root.child('rooms').child($roomId).child('meta').child('hostId').val() == auth.uid && (!data.exists() || !newData.exists() || (newData.child('x').val() == data.child('x').val() && newData.child('y').val() == data.child('y').val()))",
+            ".write": "auth != null && (root.child('rooms').child($roomId).child('meta').child('hostId').val() == auth.uid || (root.child('rooms').child($roomId).child('meta').child('permanent').val() == true && root.child('rooms').child($roomId).child('players').child(auth.uid).exists())) && (!data.exists() || !newData.exists() || root.child('rooms').child($roomId).child('meta').child('hostId').val() == auth.uid || (newData.child('x').val() == data.child('x').val() && newData.child('y').val() == data.child('y').val()))",
             ".validate": "newData.hasChildren(['x', 'y']) && newData.child('x').isNumber() && newData.child('y').isNumber()"
           }
         },
+
         "chat": {
+          ".read": "auth != null && root.child('rooms').child($roomId).child('players').child(auth.uid).exists()",
           "$messageId": {
             ".read": "auth != null && root.child('rooms').child($roomId).child('players').child(auth.uid).exists()",
             ".write": "auth != null && root.child('rooms').child($roomId).child('players').child(auth.uid).exists() && !data.exists() && newData.child('uid').val() == auth.uid",

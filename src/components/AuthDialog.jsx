@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Globe2, Mail, UserRound } from 'lucide-react'
 import Modal from './Modal'
 import '../css/components/AuthDialog.css'
@@ -16,12 +16,14 @@ function readableError(error) {
   return errorText[error?.code] || error?.message || 'Could not sign in. Try again.'
 }
 
-export default function AuthDialog({ open, onClose, auth, onAuthenticated }) {
-  const [mode, setMode] = useState('guest')
+export default function AuthDialog({ open, onClose, auth, onAuthenticated, initialMode = 'guest' }) {
+  const [mode, setMode] = useState(initialMode)
   const [values, setValues] = useState({ displayName: '', email: '', password: '' })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
+   useEffect(() => { if (open) { setMode(initialMode); setError('') } }, [open, initialMode])
+    
   async function submit(event) {
     event.preventDefault()
     setError('')
@@ -63,7 +65,7 @@ export default function AuthDialog({ open, onClose, auth, onAuthenticated }) {
       {mode === 'guest' ? (
         <form className="auth-form" onSubmit={submit}>
           <label>What should we call you?<input value={values.displayName} onChange={(event) => setValues({ ...values, displayName: event.target.value })} maxLength={32} autoComplete="nickname" placeholder="Puzzle Pal" /></label>
-          <p className="auth-hint">Guest play stays in this browser tab. Sign in to carry progress across devices.</p>
+          <p className="auth-hint">Guest play stays on this browser. Sign in to carry progress across devices</p>
           {error && <p className="form-error" role="alert">{error}</p>}
           <button type="submit" className="button button-primary button-block" disabled={busy}><UserRound size={17} /> {busy ? 'Opening the room…' : 'Continue as guest'}</button>
         </form>

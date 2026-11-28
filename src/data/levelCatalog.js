@@ -9,6 +9,7 @@ export const LEVEL_CATALOG = {
     allowRotation: true,
     requires: null,          // level that must be finished first
     imageRotation: 360,
+    imageShiftUp: 10,        // pixels above center; set 0 to center this image
   },
   'level-02': {
     title: 'Team Avatar – A Feast Together',
@@ -19,6 +20,7 @@ export const LEVEL_CATALOG = {
     allowRotation: true,
     requires: null,
     imageRotation: 270,
+    imageShiftUp: 10,
   
   },
   'level-03': {
@@ -30,9 +32,47 @@ export const LEVEL_CATALOG = {
     allowRotation: true,
     requires: null,
     imageRotation: 360,
+    imageShiftUp: 10,
   },
 
   'level-04': {
+    title: 'One Piece: A Crew Like Family',
+    description: 'Celebrate the unbreakable bond of the Straw Hat Pirates. A crew brought together by adventure, friendship, laughter, and the dream of finding the legendary One Piece.',
+    imageAlt: 'An anime-style illustration of the Straw Hat Pirates gathered closely together, smiling and enjoying a joyful moment.',
+    pieceCount: 60,
+    difficulty: 'hard',
+    allowRotation: true,
+    requires: null,
+    imageRotation: 270,
+    imageShiftUp: 10,
+  },
+
+   'level-05': {
+    title: 'Spider-Verse: Across Dimensions',
+    description: 'A vibrant comic-book illustration featuring multiple Spider-Man variants, including different masks and suits arranged in horizontal panels.',
+    imageAlt: 'A vibrant comic-book illustration featuring multiple Spider-Man variants, including different masks and suits arranged in horizontal panels.',
+    pieceCount: 60,
+    difficulty: 'Normal',
+    allowRotation: true,
+    requires: null,
+    imageRotation: 360,
+    imageShiftUp: 10,
+  },
+
+   'level-06': {
+    title: 'The Resurrection of Christ',
+    description: 'A magnificent classical religious painting depicting Jesus Christ ascending triumphantly toward the heavens, surrounded by angels, heavenly clouds, and divine golden light.',
+    imageAlt: 'Witness a powerful representation of faith, hope, and divine triumph. This breathtaking masterpiece captures the glory of Christs resurrection and the promise of eternal life.',
+    pieceCount: 75,
+    difficulty: 'hard',
+    allowRotation: true,
+    requires: null,
+    imageRotation: 360,
+    imageShiftUp: -60,
+  },
+
+
+  'level-07': {
     title: 'Floryn – Herald of Autumn',
     description: 'A graceful guardian of autumn, Floryn embraces the warmth of the changing seasons with an enchanting golden-orange outfit, elegant flowing garments, and magical seasonal details.',
     imageAlt: 'A mystical guardian adorned in elegant autumn-inspired attire, wielding the magic of golden leaves and nature. Her radiant presence brings warmth, healing, and the enchanting beauty of the fall season.',
@@ -41,7 +81,21 @@ export const LEVEL_CATALOG = {
     allowRotation: true,
     requires: null,
     imageRotation: 270,
+    imageShiftUp: 10,
   },
+
+  'level-08': {
+    title: 'Architectural Wonders',
+    description: 'Explore a world of architectural brilliance where history, creativity, and engineering come together.',
+    imageAlt: 'A detailed vintage architectural collage featuring historical European buildings, the Eiffel Tower, grand libraries, classical sculptures, engineering blueprints, and intricate architectural sketches.',
+    pieceCount: 150,
+    difficulty: 'Very Hard',
+    allowRotation: true,
+    requires: null,
+    imageRotation: 270,
+    imageShiftUp: 10,
+  },
+
   // add level-04 ... level-10 the same way
 }
 
@@ -53,4 +107,5 @@ export const DEFAULT_RULES = {
   allowRotation: false,
   requires: null,
   imageRotation: 270,
+  imageShiftUp: 0,
 }

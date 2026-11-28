@@ -51,6 +51,16 @@
     padding-left: 0;
     border-left: 0;
   }
+  .account-loading {
+    width: 44px;
+    height: 44px;
+    justify-content: center;
+    padding-left: 0;
+    border-left: 0;
+  }
+  .account-loading-name {
+    display: none;
+  }
   .account-trigger {
     min-width: 44px;
     min-height: 44px;

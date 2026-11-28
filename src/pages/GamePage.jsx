@@ -1,5 +1,5 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Check, Clock3, Clipboard, Image, MessageCircle, Pause, Play, RotateCw, Share2, Sparkles, Trophy, UsersRound, X, Maximize2, Minimize2 } from 'lucide-react'
+import { ArrowLeft, Check, Clock3, Clipboard, Image, MessageCircle, Move, Pause, Play, RotateCw, Share2, Sparkles, Trophy, UsersRound, X, Maximize2, Minimize2 } from 'lucide-react'
 import Avatar from '../components/Avatar'
 import ChatPanel from '../components/ChatPanel'
 import Modal from '../components/Modal'
@@ -30,11 +30,15 @@ function currentElapsed(game) {
   const started = Number(game.resumedAt || game.startedAt) || Date.now()
   return saved + Math.max(0, Math.floor((Date.now() - started) / 1000))
 }
-export default function GamePage({ roomControl, level, user, audio, onLeave, onBackToRoom, onShare, onNextLevel, onCompletionSaved, shared = false }) {
+export default function GamePage({ roomControl, level, user, audio, onLeave, onReturnFromGame, onShare, onNextLevel, onCompletionSaved, shared = false }) {
   const { room, placedCount, activities, piecesRef } = roomControl
   const host = shared || room.meta?.hostId === user?.uid
   const status = room.game.status || room.meta?.status || 'waiting'
   const [referenceVisible, setReferenceVisible] = useState(false)
+  const [referenceOpacity, setReferenceOpacity] = useState(16)
+  const [referenceWindowOpen, setReferenceWindowOpen] = useState(false)
+  const [referencePosition, setReferencePosition] = useState({ x: 12, y: 12 })
+  const [referenceSize, setReferenceSize] = useState({ width: 256, height: 220 })
   const [boardReady, setBoardReady] = useState(false)
   const [resetToken, setResetToken] = useState(0)
   const [elapsed, setElapsed] = useState(() => currentElapsed(room.game))
@@ -50,6 +54,10 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
   const [chatOpen, setChatOpen] = useState(false)
   const [trayOpen, setTrayOpen] = useState(false)
   const pageRef = useRef(null)
+  const boardFrameRef = useRef(null)
+  const referenceWindowRef = useRef(null)
+  const referenceDragRef = useRef(null)
+  const referenceResizeRef = useRef(null)
   const nativeFsRef = useRef(false)
   const [fullscreen, setFullscreen] = useState(false)
   const completionKey = `${room.id || ''}:${room.game.sessionId || ''}`
@@ -60,6 +68,134 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
   const progress = totalPieces ? Math.min(100, Math.round((placedCount / totalPieces) * 100)) : 0
   const [skipCelebration, setSkipCelebration] = useState(isComplete) // already finished when the page opened
   const [celebrationDone, setCelebrationDone] = useState(false)
+  const clampReferencePosition = useCallback((x, y) => {
+    const board = boardFrameRef.current
+    const panel = referenceWindowRef.current
+    const maxX = Math.max(8, (board?.clientWidth || 0) - (panel?.offsetWidth || 256) - 8)
+    const maxY = Math.max(8, (board?.clientHeight || 0) - (panel?.offsetHeight || 220) - 8)
+    return {
+      x: Math.max(8, Math.min(x, maxX)),
+      y: Math.max(8, Math.min(y, maxY)),
+    }
+  }, [])
+
+  function startReferenceDrag(event) {
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    if (event.target.closest?.('button')) return
+    const bounds = referenceWindowRef.current?.getBoundingClientRect()
+    const boardBounds = boardFrameRef.current?.getBoundingClientRect()
+    const board = boardFrameRef.current
+    if (!bounds || !boardBounds || !board) return
+    referenceDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      left: bounds.left - boardBounds.left - board.clientLeft,
+      top: bounds.top - boardBounds.top - board.clientTop,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    event.preventDefault()
+  }
+
+  function moveReferenceDrag(event) {
+    const drag = referenceDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    setReferencePosition(clampReferencePosition(
+      drag.left + event.clientX - drag.startX,
+      drag.top + event.clientY - drag.startY,
+    ))
+  }
+
+  function stopReferenceDrag(event) {
+    if (referenceDragRef.current?.pointerId === event.pointerId) referenceDragRef.current = null
+  }
+
+  function startReferenceResize(event) {
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    const bounds = referenceWindowRef.current?.getBoundingClientRect()
+    if (!bounds) return
+    referenceResizeRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      width: bounds.width,
+      height: bounds.height,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    event.preventDefault()
+  }
+
+  function moveReferenceResize(event) {
+    const resize = referenceResizeRef.current
+    const board = boardFrameRef.current
+    if (!resize || resize.pointerId !== event.pointerId || !board) return
+    const maxWidth = Math.max(176, board.clientWidth - referencePosition.x - 8)
+    const maxHeight = Math.max(164, board.clientHeight - referencePosition.y - 8)
+    setReferenceSize({
+      width: Math.min(maxWidth, Math.max(176, resize.width + event.clientX - resize.startX)),
+      height: Math.min(maxHeight, Math.max(164, resize.height + event.clientY - resize.startY)),
+    })
+  }
+
+  function stopReferenceResize(event) {
+    if (referenceResizeRef.current?.pointerId === event.pointerId) referenceResizeRef.current = null
+  }
+
+  function resizeReferenceByKeyboard(event) {
+    const step = event.shiftKey ? 32 : 16
+    const offset = {
+      ArrowLeft: [-step, 0],
+      ArrowRight: [step, 0],
+      ArrowUp: [0, -step],
+      ArrowDown: [0, step],
+    }[event.key]
+    const board = boardFrameRef.current
+    if (!offset || !board) return
+    event.preventDefault()
+    const maxWidth = Math.max(176, board.clientWidth - referencePosition.x - 8)
+    const maxHeight = Math.max(164, board.clientHeight - referencePosition.y - 8)
+    setReferenceSize((size) => ({
+      width: Math.min(maxWidth, Math.max(176, size.width + offset[0])),
+      height: Math.min(maxHeight, Math.max(164, size.height + offset[1])),
+    }))
+  }
+
+  function moveReferenceByKeyboard(event) {
+    const step = event.shiftKey ? 32 : 16
+    const offset = {
+      ArrowLeft: [-step, 0],
+      ArrowRight: [step, 0],
+      ArrowUp: [0, -step],
+      ArrowDown: [0, step],
+    }[event.key]
+    if (!offset) return
+    event.preventDefault()
+    setReferencePosition((position) => clampReferencePosition(position.x + offset[0], position.y + offset[1]))
+  }
+
+  useEffect(() => {
+    if (!referenceWindowOpen) return undefined
+    const keepReferenceInView = () => setReferencePosition((position) => clampReferencePosition(position.x, position.y))
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(keepReferenceInView)
+    if (boardFrameRef.current) observer?.observe(boardFrameRef.current)
+    if (referenceWindowRef.current) observer?.observe(referenceWindowRef.current)
+    window.addEventListener('resize', keepReferenceInView)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', keepReferenceInView)
+    }
+  }, [clampReferencePosition, referenceWindowOpen])
+
+  function toggleReferenceWindow() {
+    if (!referenceWindowOpen) {
+      const board = boardFrameRef.current
+      setReferencePosition(clampReferencePosition(
+        Math.max(8, (board?.clientWidth || 284) - 272),
+        Math.max(8, (board?.clientHeight || 240) - 232),
+      ))
+    }
+    setReferenceWindowOpen((open) => !open)
+  }
   useEffect(() => {
     if (!isComplete) { setSkipCelebration(false); setCelebrationDone(false) }
   }, [isComplete])
@@ -168,13 +304,14 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
           : await roomControl.complete({ uid: user.uid, sessionId: room.game.sessionId, levelId: level.id, players: room.players, totalTime: elapsed, placedCount: totalPieces, contributionCounts })
         setEarnedAchievements(result?.achievements || [])
         if (!shared) await onCompletionSaved?.()
+      } catch (error) {
         setCompletionError(error.message || 'Could not save the completion record.')
       } finally {
         setSavingCompletion(false)
       }
     }
     void finish()
-  }, [host, level,shared, contributors, placedCount, completionKey, status, roomControl.controlStatus, roomControl.complete, room.players, room.game.sessionId, elapsed, contributionCounts, audio.playSound, onCompletionSaved, completionAttempt, user?.uid, totalPieces])
+  }, [host, level, shared, contributors, placedCount, completionKey, status, roomControl.controlStatus, roomControl.complete, room.players, room.game.sessionId, elapsed, contributionCounts, audio.playSound, onCompletionSaved, completionAttempt, user?.uid, totalPieces])
 
   const handleReadyChange = useCallback((ready) => setBoardReady(ready), [])
 
@@ -200,9 +337,9 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
     }
   }
 
-  
 
-  
+
+
 
   const activitiesWithNames = activities.map((activity) => ({
     ...activity,
@@ -227,6 +364,8 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
         <section className={`board-column ${trayOpen ? 'tray-open' : ''}`} aria-label="Shared puzzle board">
           <div className="board-toolbar"><div className="board-toolbar-note"><span className="board-spark"><Sparkles size={15} /></span><span>{status === 'paused' ? 'The table is paused for a moment.' : 'A little more fits every time you look.'}</span></div><div className="board-toolbar-actions">
             <button type="button" className={`board-tool ${referenceVisible ? 'active' : ''}`} aria-pressed={referenceVisible} onClick={() => setReferenceVisible((value) => !value)}><Image size={16} /> Reference</button>
+            {referenceVisible && <label className="reference-opacity-control"><span>Opacity</span><input aria-label="Board reference opacity" type="range" min="5" max="70" value={referenceOpacity} onChange={(event) => setReferenceOpacity(Number(event.target.value))} /><output>{referenceOpacity}%</output></label>}
+            <button type="button" className={`board-tool ${referenceWindowOpen ? 'active' : ''}`} aria-expanded={referenceWindowOpen} aria-controls="floating-reference-image" onClick={toggleReferenceWindow}><Move size={16} /> Picture</button>
             <button type="button" className={`board-tool board-chat-toggle ${chatOpen ? 'active' : ''}`} aria-expanded={chatOpen} onClick={() => setChatOpen((open) => !open)}><MessageCircle size={16} /> Chat</button>
             <button type="button" className="board-tool" onClick={fullscreen ? exitFullscreen : enterFullscreen}>{fullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />} {fullscreen ? 'Exit full screen' : 'Full screen'}</button>
             {level?.allowRotation && <span className="rotation-hint"><RotateCw size={14} /> Rotate pieces</span>}
@@ -234,7 +373,7 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
             {host && status === 'completed' && <button type="button" className="board-tool" onClick={() => setConfirmRestart(true)}><RotateCw size={16} /> Start again</button>}
             <button type="button" className="board-tool board-exit" onClick={() => setConfirmExit(true)}><X size={16} /> Leave</button>
           </div></div>
-          <div className={`board-frame ${status === 'paused' ? 'board-paused' : ''} ${fullscreen ? 'is-fullscreen' : ''}`}>
+          <div className={`board-frame ${status === 'paused' ? 'board-paused' : ''} ${fullscreen ? 'is-fullscreen' : ''}`} ref={boardFrameRef}>
             {currentLevel && <PuzzleBoard
               fullscreen={fullscreen}
               level={currentLevel}
@@ -247,6 +386,7 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
               resetToken={resetToken}
               disabled={!boardReady || status !== 'playing' || isComplete}
               referenceVisible={referenceVisible}
+              referenceOpacity={referenceOpacity / 100}
               trayOpen={trayOpen}
               onTrayToggle={setTrayOpen}
               onGenerated={handleGenerated}
@@ -257,10 +397,20 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
               <button type="button" className="fs-btn" onClick={exitFullscreen} aria-label="Exit full screen"><Minimize2 size={18} /></button>
               <div className="fs-pill"><strong>{progress}%</strong><span>{clockTime(elapsed)}</span></div>
               <button type="button" className={`fs-btn ${referenceVisible ? 'is-on' : ''}`} onClick={() => setReferenceVisible((v) => !v)} aria-label="Toggle reference image"><Image size={18} /></button>
+              <button type="button" className={`fs-btn ${referenceWindowOpen ? 'is-on' : ''}`} onClick={toggleReferenceWindow} aria-label="Toggle draggable reference picture" aria-pressed={referenceWindowOpen}><Move size={18} /></button>
               <button type="button" className={`fs-btn fs-chat ${chatOpen ? 'is-on' : ''}`} onClick={() => setChatOpen((o) => !o)} aria-label="Toggle chat"><MessageCircle size={18} /></button>
               {host && status !== 'completed' && <button type="button" className="fs-btn" onClick={togglePause} disabled={!boardReady} aria-label={status === 'paused' ? 'Resume' : 'Pause'}>{status === 'paused' ? <Play size={18} /> : <Pause size={18} />}</button>}
             </div>}
             {status === 'paused' && <div className="board-paused-overlay"><div className="pause-mark"><Pause size={21} /></div><strong>Just a little pause</strong><span>{host ? 'Resume when you are ready.' : 'The host will be right back.'}</span>{host && <button type="button" className="button button-primary" onClick={togglePause}><Play size={15} fill="currentColor" /> Keep going</button>}</div>}
+            {referenceWindowOpen && <section id="floating-reference-image" className="floating-reference" ref={referenceWindowRef} style={{ left: `${referencePosition.x}px`, top: `${referencePosition.y}px`, width: `${referenceSize.width}px`, height: `${referenceSize.height}px` }} aria-labelledby="floating-reference-title">
+              <header className="floating-reference-header">
+                <div className="reference-drag-handle" role="group" tabIndex={0} aria-label="Move reference picture with pointer or arrow keys" onPointerDown={startReferenceDrag} onPointerMove={moveReferenceDrag} onPointerUp={stopReferenceDrag} onPointerCancel={stopReferenceDrag} onKeyDown={moveReferenceByKeyboard}>
+                  <Move size={15} aria-hidden="true" /><strong id="floating-reference-title">Reference picture</strong><span>Drag to move</span>
+                </div>
+                <button type="button" className="floating-reference-close" aria-label="Close reference picture" onClick={() => setReferenceWindowOpen(false)}><X size={17} /></button>
+              </header>
+              <div className="floating-reference-image"><img src={level?.imageURL} alt={level?.imageAlt || `${level?.title || 'Puzzle'} reference`} draggable="false" /><button type="button" className="floating-reference-resize" aria-label="Resize reference picture with drag or arrow keys" title="Drag to resize; use arrow keys when focused" onPointerDown={startReferenceResize} onPointerMove={moveReferenceResize} onPointerUp={stopReferenceResize} onPointerCancel={stopReferenceResize} onKeyDown={resizeReferenceByKeyboard} /></div>
+            </section>}
           </div>
           <div className="board-hint-row"><span><span className="hint-dot" /> Tap a piece to pick it up, tap again to drop it{level?.allowRotation ? ', double-tap to rotate' : ''}</span><span>Zoom, pan, and find your way around</span><button type="button" onClick={() => setReferenceVisible((value) => !value)}>{referenceVisible ? 'Hide reference image' : 'Show reference image'}</button></div>
           {completionError && !isComplete && <p className="form-error game-error" role="alert">{completionError}</p>}
@@ -278,7 +428,7 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
 
       {showCompletion && <div className="completion-screen" role="dialog" aria-modal="true" aria-labelledby="completion-title">
         <div className="completion-confetti" aria-hidden="true"><Sparkles /><Sparkles /><Sparkles /></div>
-        <button type="button" className="completion-close" onClick={onBackToRoom} aria-label="Return to room"><X size={18} /></button>
+        <button type="button" className="completion-close" onClick={onReturnFromGame} aria-label={shared ? 'Return to our table' : 'Return to puzzle shelf'}><X size={18} /></button>
         <div className="completion-photo"><img src={level?.imageURL} alt={level?.imageAlt || ''} /><span><Check size={16} /> Puzzle complete</span></div>
         <div className="completion-copy"><p className="section-eyebrow">A TABLE FULL OF GOOD WORK</p><h2 id="completion-title">Look what you made <em>together.</em></h2><p>Every piece found its place. Thanks for taking your time with each other.</p></div>
         <div className="completion-stats"><div><Clock3 size={15} /><span><small>Time together</small><strong>{clockTime(elapsed)}</strong></span></div><div><UsersRound size={15} /><span><small>Puzzle pals</small><strong>{contributors.length}</strong></span></div><div><Trophy size={15} /><span><small>Level finished</small><strong>{level?.order} of 10</strong></span></div></div>
@@ -289,7 +439,7 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onB
         <div className="completion-actions">
           <button type="button" className="button button-primary" onClick={onNextLevel} disabled={!host || !onNextLevel}><Sparkles size={16} /> Next level</button>
           <button type="button" className="button button-outline" onClick={restartPuzzle} disabled={!host} title={host ? undefined : 'Only the host can restart'}><RotateCw size={16} /> Play again</button>
-          <button type="button" className="button button-outline" onClick={onBackToRoom}>Back to room</button>
+          <button type="button" className="button button-outline" onClick={onReturnFromGame}>{shared ? 'Back to our table' : 'Back to puzzle shelf'}</button>
         </div>
       </div>}
 

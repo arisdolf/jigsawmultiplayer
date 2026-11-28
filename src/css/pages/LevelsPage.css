@@ -58,6 +58,11 @@
   color: #547e9f;
   font: 500 35px var(--serif);
 }
+.levels-count-skeleton {
+  width: 1.45em;
+  height: 1em;
+  vertical-align: middle;
+}
 .levels-total span {
   color: #8798a5;
   font-size: 9px;

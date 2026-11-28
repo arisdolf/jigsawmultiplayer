@@ -26,7 +26,8 @@ body .board-frame.is-fullscreen .canvas-zoom-controls {
   position: absolute; z-index: 6;
   top: max(8px, env(safe-area-inset-top));
   left: max(8px, env(safe-area-inset-left));
-  display: flex; align-items: center; gap: 6px;
+  right: max(8px, env(safe-area-inset-right));
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
   pointer-events: none;
 }
 .fs-hud > * { pointer-events: auto; }
@@ -71,18 +72,6 @@ body .board-frame.is-fullscreen .canvas-zoom-controls {
   body .difficulty-filters button { min-height: 40px; font-size: 12px; }
   body .levels-note { font-size: 12px; }
   body .library-search input { font-size: 16px; height: 46px; }
-  body .room-code-box > span { font-size: 10px; }
-  body .room-code-box button { font-size: 11px; min-height: 40px; }
-  body .room-heading > div > p:last-child { font-size: 13px; }
-  body .room-setup-heading .room-player-count, body .room-capacity-note { font-size: 11px; }
-  body .room-level-select > span, body .room-name-select > span { font-size: 12px; }
-  body .privacy-button strong { font-size: 13px; }
-  body .privacy-button small { font-size: 11px; }
-  body .room-member strong { font-size: 13px; }
-  body .room-member div span, body .host-badge { font-size: 10px; }
-  body .room-host-note, body .room-cozy-note { font-size: 12px; }
-  body .room-waiting-message strong { font-size: 13px; }
-  body .room-waiting-message span { font-size: 12px; }
   body .join-page-card > p:not(.section-eyebrow) { font-size: 13px; }
   body .join-page-card > small { font-size: 11px; }
   body .auth-hint, body .firebase-hint { font-size: 12px; }

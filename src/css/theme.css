@@ -1,0 +1,557 @@
+[data-theme="dark"] {
+  color-scheme: dark;
+  --color-blue-600: #a0c2dc;
+  --color-blue-800: #d0e0eb;
+  --color-blue-950: #e2ebf1;
+  --color-coral-600: #e28c83;
+  --color-paper-50: #233746;
+  --color-blue-50: #172630;
+  --color-beige-100: #3a3831;
+  --color-sage-500: #a5bba6;
+  --color-line-200: #3b5060;
+  --color-muted-500: #b0bec8;
+  --surface-page: #172630;
+  --surface-card: #233746;
+  --surface-raised: #2b4050;
+  --surface-soft: #293d4c;
+  --surface-control: #1c2f3c;
+  --text-primary: #e2ebf1;
+  --text-secondary: #b0bec8;
+  --text-subtle: #9cabb6;
+  --border-default: #3b5060;
+  --border-strong: #587287;
+  --surface-topbar: rgb(28 43 54 / 96%);
+  --surface-footnote: rgb(35 55 70 / 94%);
+  --surface-hover: #344b5c;
+  --surface-inset: #1d303d;
+  --surface-track: #344a5a;
+  --surface-loading: #2b4050;
+  --surface-loading-mid: #354b5b;
+  --surface-loading-tint: rgb(53 75 91 / 45%);
+  --surface-loading-highlight: rgb(53 75 91 / 84%);
+  --surface-message-own: #31495a;
+  --surface-hero-highlight: #40596b;
+  --surface-progress-start: #719cbb;
+  --surface-progress-end: #a6c2d5;
+  --surface-button-dark: #35536b;
+  --surface-board-overlay: rgb(23 38 48 / 88%);
+  --overlay-backdrop: rgb(5 13 19 / 72%);
+  --shadow-dark: rgb(0 0 0 / 40%);
+  --text-on-accent: #f5f8fa;
+  --text-warm: #e2c38f;
+  --text-error: #f0a09a;
+  --text-success: #a8d0ae;
+  --surface-success: #2d473b;
+  --surface-selection: #38546a;
+  --surface-toggle-off: #465b6b;
+  --surface-toggle-on: #719cbb;
+}
+
+[data-theme="dark"] body,
+[data-theme="dark"] .app-shell {
+  color: var(--text-primary);
+  background: var(--surface-page);
+}
+
+[data-theme="dark"] ::selection {
+  color: var(--text-primary);
+  background: var(--surface-selection);
+}
+
+[data-theme="dark"] .topbar,
+[data-theme="dark"] .mobile-nav,
+[data-theme="dark"] .app-footnote,
+[data-theme="dark"] .level-card,
+[data-theme="dark"] .together-table,
+[data-theme="dark"] .your-table,
+[data-theme="dark"] .recent-puzzle-row,
+[data-theme="dark"] .join-page-card,
+[data-theme="dark"] .profile-card,
+[data-theme="dark"] .admin-toolbar,
+[data-theme="dark"] .admin-level-list,
+[data-theme="dark"] .admin-editor,
+[data-theme="dark"] .game-stat-strip,
+[data-theme="dark"] .table-friends,
+[data-theme="dark"] .recent-activity,
+[data-theme="dark"] .floating-reference,
+[data-theme="dark"] .chat-panel,
+[data-theme="dark"] .recent-card,
+[data-theme="dark"] .library-search,
+[data-theme="dark"] .library-empty,
+[data-theme="dark"] .home-library-error,
+[data-theme="dark"] .levels-note,
+[data-theme="dark"] .profile-stat-row,
+[data-theme="dark"] .profile-completion-list li,
+[data-theme="dark"] .together-loading-save,
+[data-theme="dark"] .loading-game-stats,
+[data-theme="dark"] .loading-side-card,
+[data-theme="dark"] .toast {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+  background-color: var(--surface-card);
+}
+
+[data-theme="dark"] .sound-quick-controls,
+[data-theme="dark"] .auth-tabs,
+[data-theme="dark"] .difficulty-filters button.active,
+[data-theme="dark"] .admin-level-option:hover,
+[data-theme="dark"] .admin-level-option.active,
+[data-theme="dark"] .admin-order-buttons button,
+[data-theme="dark"] .admin-rotation-controls button,
+[data-theme="dark"] .together-detail-list div,
+[data-theme="dark"] .contributor-list > div,
+[data-theme="dark"] .audio-setting-icon {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+  background-color: var(--surface-soft);
+}
+
+[data-theme="dark"] .topbar,
+[data-theme="dark"] .mobile-nav {
+  background-color: var(--surface-topbar);
+}
+
+[data-theme="dark"] .app-footnote {
+  color: var(--text-secondary);
+  background-color: var(--surface-footnote);
+}
+
+[data-theme="dark"] .topbar .nav-link,
+[data-theme="dark"] .mobile-nav-link,
+[data-theme="dark"] .icon-button,
+[data-theme="dark"] .sound-quick,
+[data-theme="dark"] .sound-settings-button,
+[data-theme="dark"] .board-tool,
+[data-theme="dark"] .board-hint-row button,
+[data-theme="dark"] .difficulty-filters button {
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .topbar .nav-link:hover,
+[data-theme="dark"] .topbar .nav-link.active,
+[data-theme="dark"] .mobile-nav-link.active,
+[data-theme="dark"] .icon-button:hover,
+[data-theme="dark"] .sound-quick:hover,
+[data-theme="dark"] .sound-settings-button:hover,
+[data-theme="dark"] .board-tool:hover,
+[data-theme="dark"] .board-tool.active,
+[data-theme="dark"] .difficulty-filters button:hover,
+[data-theme="dark"] .difficulty-filters button.active {
+  color: var(--text-primary);
+  background-color: var(--surface-soft);
+}
+
+[data-theme="dark"] .button-outline {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+  background-color: var(--surface-raised);
+}
+
+[data-theme="dark"] .button-outline:hover:not(:disabled),
+[data-theme="dark"] .button-quiet:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background-color: var(--surface-hover);
+}
+
+[data-theme="dark"] .button-quiet,
+[data-theme="dark"] .back-link,
+[data-theme="dark"] .browse-link,
+[data-theme="dark"] .text-action {
+  color: var(--color-blue-600);
+}
+
+[data-theme="dark"] .button-dark {
+  color: var(--text-on-accent);
+  background: var(--surface-button-dark);
+}
+
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+  background-color: var(--surface-control);
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: var(--text-subtle);
+}
+
+[data-theme="dark"] input[type="range"] {
+  accent-color: var(--color-blue-600);
+}
+
+[data-theme="dark"] .app-modal {
+  border-color: #435a6b;
+  color: var(--text-primary);
+  background-color: var(--surface-card);
+}
+
+[data-theme="dark"] .app-modal::backdrop {
+  background: var(--overlay-backdrop);
+}
+
+[data-theme="dark"] .modal-heading h2,
+[data-theme="dark"] .level-heading-line h3,
+[data-theme="dark"] .admin-level-option strong,
+[data-theme="dark"] .admin-editor h2,
+[data-theme="dark"] .completion-copy h2 {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .section-eyebrow,
+[data-theme="dark"] .together-heading p:last-child,
+[data-theme="dark"] .together-meta,
+[data-theme="dark"] .together-stats,
+[data-theme="dark"] .together-here,
+[data-theme="dark"] .together-note,
+[data-theme="dark"] .levels-header > div > p:last-child,
+[data-theme="dark"] .level-heading-line p,
+[data-theme="dark"] .level-details-row,
+[data-theme="dark"] .profile-page p:not(.form-error),
+[data-theme="dark"] .profile-completion-list small,
+[data-theme="dark"] .admin-level-name small,
+[data-theme="dark"] .admin-preview small,
+[data-theme="dark"] .admin-preview span,
+[data-theme="dark"] .admin-field-grid label,
+[data-theme="dark"] .admin-full-field,
+[data-theme="dark"] .modal-heading p,
+[data-theme="dark"] .completion-copy > p:last-child,
+[data-theme="dark"] .completion-stats small,
+[data-theme="dark"] .completion-contributors-heading,
+[data-theme="dark"] .chat-heading span,
+[data-theme="dark"] .chat-message-meta,
+[data-theme="dark"] .chat-message-top time,
+[data-theme="dark"] .chat-empty,
+[data-theme="dark"] .audio-setting-head,
+[data-theme="dark"] .audio-setting-main p,
+[data-theme="dark"] .audio-note,
+[data-theme="dark"] .board-hint-row,
+[data-theme="dark"] .game-stat small,
+[data-theme="dark"] .recent-info small,
+[data-theme="dark"] .game-member-row small,
+[data-theme="dark"] .recent-activity li small,
+[data-theme="dark"] .activity-empty {
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .hero-art {
+  border-color: var(--border-default);
+  background: linear-gradient(150deg, var(--surface-raised), var(--surface-soft));
+}
+
+[data-theme="dark"] .hero-art-empty {
+  background: radial-gradient(circle at 50% 30%, var(--surface-hero-highlight) 0, var(--surface-soft) 62%);
+}
+
+[data-theme="dark"] .floating-note,
+[data-theme="dark"] .join-strip,
+[data-theme="dark"] .how-it-works,
+[data-theme="dark"] .admin-upload,
+[data-theme="dark"] .admin-add-level,
+[data-theme="dark"] .admin-level-option,
+[data-theme="dark"] .admin-order-buttons button,
+[data-theme="dark"] .admin-rotation-controls button,
+[data-theme="dark"] .floating-reference-close,
+[data-theme="dark"] .floating-reference-resize,
+[data-theme="dark"] .pause-mark,
+[data-theme="dark"] .activity-piece,
+[data-theme="dark"] .timer-icon,
+[data-theme="dark"] .welcome-flower,
+[data-theme="dark"] .step-mark,
+[data-theme="dark"] .step-coral,
+[data-theme="dark"] .step-beige,
+[data-theme="dark"] .table-stamp,
+[data-theme="dark"] .join-key-icon,
+[data-theme="dark"] .recent-badge,
+[data-theme="dark"] .profile-studio-button,
+[data-theme="dark"] .profile-achievements span,
+[data-theme="dark"] .difficulty-pill,
+[data-theme="dark"] .level-image-status,
+[data-theme="dark"] .level-open-icon,
+[data-theme="dark"] .chat-message-content,
+[data-theme="dark"] .chat-compose,
+[data-theme="dark"] .chat-composer,
+[data-theme="dark"] .fs-btn,
+[data-theme="dark"] .fs-pill,
+[data-theme="dark"] .completion-close,
+[data-theme="dark"] .completion-photo > span {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+  background-color: var(--surface-raised);
+}
+
+[data-theme="dark"] .difficulty-hard,
+[data-theme="dark"] .difficulty-expert,
+[data-theme="dark"] .difficulty-master,
+[data-theme="dark"] .difficulty-normal,
+[data-theme="dark"] .note-icon,
+[data-theme="dark"] .welcome-flower,
+[data-theme="dark"] .note-coral,
+[data-theme="dark"] .game-state-pill,
+[data-theme="dark"] .game-state-pill.state-completed,
+[data-theme="dark"] .game-stat-icon,
+[data-theme="dark"] .chat-heading-icon,
+[data-theme="dark"] .auth-tabs button.active,
+[data-theme="dark"] .auth-hint,
+[data-theme="dark"] .firebase-hint,
+[data-theme="dark"] .admin-preview-image {
+  color: var(--text-primary);
+  background-color: var(--surface-soft);
+}
+
+[data-theme="dark"] .level-image-button,
+[data-theme="dark"] .recent-thumb,
+[data-theme="dark"] .completion-photo,
+[data-theme="dark"] .hero-image-frame,
+[data-theme="dark"] .hero-art-loading,
+[data-theme="dark"] .floating-reference-image,
+[data-theme="dark"] .admin-preview-image,
+[data-theme="dark"] .board-frame {
+  border-color: var(--border-default);
+  background-color: var(--surface-inset);
+}
+
+[data-theme="dark"] .fs-btn.is-on {
+  color: var(--text-primary);
+  background-color: var(--surface-button-dark);
+}
+
+[data-theme="dark"] .together-progress,
+[data-theme="dark"] .progress-track,
+[data-theme="dark"] .loading-track {
+  background-color: var(--surface-track);
+}
+
+[data-theme="dark"] .together-progress i,
+[data-theme="dark"] .progress-track i,
+[data-theme="dark"] .loading-track i {
+  background: linear-gradient(90deg, var(--surface-progress-start), var(--surface-progress-end));
+}
+
+[data-theme="dark"] .chat-message.is-own .chat-message-content {
+  background-color: var(--surface-message-own);
+}
+
+[data-theme="dark"] .board-loading,
+[data-theme="dark"] .canvas-zoom-controls,
+[data-theme="dark"] .puzzle-piece-tray,
+[data-theme="dark"] .floating-reference,
+[data-theme="dark"] .completion-screen {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+  background-color: var(--surface-card);
+}
+
+[data-theme="dark"] .board-paused-overlay {
+  color: var(--text-primary);
+  background: var(--surface-board-overlay);
+}
+
+[data-theme="dark"] .board-loading-piece,
+[data-theme="dark"] .board-loading-piece::before,
+[data-theme="dark"] .board-loading-piece::after {
+  background-color: var(--surface-raised);
+}
+
+[data-theme="dark"] .hero-art-play {
+  color: var(--text-primary);
+  background-color: var(--surface-raised);
+}
+
+[data-theme="dark"] .admin-upload-icon,
+[data-theme="dark"] .admin-level-option > i,
+[data-theme="dark"] .auth-tabs,
+[data-theme="dark"] .auth-tabs button.active {
+  background-color: var(--surface-soft);
+}
+
+[data-theme="dark"] .admin-upload i {
+  background-color: var(--surface-progress-start);
+}
+
+[data-theme="dark"] .completion-screen {
+  box-shadow: 0 0 0 100vmax var(--overlay-backdrop), 0 25px 80px var(--shadow-dark);
+}
+
+[data-theme="dark"] .completion-photo {
+  background-color: var(--surface-soft);
+}
+
+[data-theme="dark"] .completion-stats,
+[data-theme="dark"] .audio-setting {
+  border-color: var(--border-default);
+}
+
+[data-theme="dark"] .contributor-list > div,
+[data-theme="dark"] .earned-achievement {
+  border-color: var(--border-default);
+  background-color: var(--surface-soft);
+}
+
+[data-theme="dark"] .earned-achievement {
+  color: var(--text-warm);
+}
+
+[data-theme="dark"] .together-empty,
+[data-theme="dark"] .library-empty,
+[data-theme="dark"] .admin-empty,
+[data-theme="dark"] .access-denied {
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+  background-color: var(--surface-card);
+}
+
+[data-theme="dark"] .data-skeleton,
+[data-theme="dark"] .loading-bone {
+  background-image: linear-gradient(90deg, var(--surface-loading), var(--surface-loading-mid), var(--surface-loading));
+}
+
+[data-theme="dark"] .toggle-switch {
+  background-color: var(--surface-toggle-off);
+}
+
+[data-theme="dark"] .toggle-switch.active {
+  background-color: var(--surface-toggle-on);
+}
+
+[data-theme="dark"] .form-error {
+  color: var(--text-error);
+}
+
+[data-theme="dark"] .admin-success {
+  color: var(--text-success);
+  background-color: var(--surface-success);
+}
+
+[data-theme="dark"] .profile-page .profile-completion-image,
+[data-theme="dark"] .admin-level-option > i,
+[data-theme="dark"] .auth-divider::before,
+[data-theme="dark"] .auth-divider::after {
+  background-color: var(--surface-soft);
+}
+
+[data-theme="dark"] .auth-hint,
+[data-theme="dark"] .firebase-hint,
+[data-theme="dark"] .recent-info strong {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .your-table {
+  background: var(--surface-card);
+}
+
+[data-theme="dark"] .game-chat-area {
+  border-color: var(--border-default);
+  background-color: var(--surface-card);
+}
+
+[data-theme="dark"] .together-skeleton,
+[data-theme="dark"] .hero-art-loading {
+  background: linear-gradient(100deg, var(--surface-loading) 25%, var(--surface-loading-mid) 48%, var(--surface-loading) 72%);
+  background-size: 400% 100%;
+}
+
+[data-theme="dark"] .hero-title-skeleton,
+[data-theme="dark"] .hero-meta-skeleton,
+[data-theme="dark"] .hero-index-skeleton {
+  background-image: linear-gradient(90deg, var(--surface-loading-tint), var(--surface-loading-highlight), var(--surface-loading-tint));
+}
+
+[data-theme="dark"] .join-strip-copy strong,
+[data-theme="dark"] .floating-note strong,
+[data-theme="dark"] .recent-info strong,
+[data-theme="dark"] .chat-heading strong,
+[data-theme="dark"] .chat-message-top strong,
+[data-theme="dark"] .chat-message-meta strong,
+[data-theme="dark"] .chat-message p,
+[data-theme="dark"] .chat-message-content p {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .join-strip-copy div > span,
+[data-theme="dark"] .floating-note small,
+[data-theme="dark"] .chat-privacy-note,
+[data-theme="dark"] .chat-message-top time,
+[data-theme="dark"] .chat-message-meta time,
+[data-theme="dark"] .chat-empty {
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .chat-heading,
+[data-theme="dark"] .chat-compose,
+[data-theme="dark"] .chat-composer {
+  border-color: var(--border-default);
+}
+
+[data-theme="dark"] .chat-compose button,
+[data-theme="dark"] .chat-composer button {
+  color: var(--text-primary);
+  background-color: var(--surface-button-dark);
+}
+
+[data-theme="dark"] .app-shell :is(
+  .together-table.is-ready,
+  .profile-page .profile-card,
+  .profile-page .profile-stat-row,
+  .admin-page .admin-toolbar,
+  .admin-page .admin-level-list,
+  .admin-page .admin-editor,
+  .game-page .game-stat-strip,
+  .game-page .table-friends,
+  .game-page .recent-activity,
+  .game-page .game-chat-area,
+  .game-chat-area.is-open
+) {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+  background-color: var(--surface-card);
+}
+
+[data-theme="dark"] .app-shell .library-search {
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+  background-color: var(--surface-control);
+}
+
+[data-theme="dark"] .app-shell .library-search input,
+[data-theme="dark"] .app-shell .library-search input:focus,
+[data-theme="dark"] .app-shell .library-search input:focus-visible {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+  color: var(--text-primary);
+  background-color: transparent;
+}
+
+[data-theme="dark"] .app-shell .library-search input::placeholder {
+  color: var(--text-subtle);
+}
+
+[data-theme="dark"] .app-shell .library-search:focus-within {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 3px var(--surface-selection);
+}
+
+[data-theme="dark"] .app-shell .library-grid .level-image-status.is-complete,
+[data-theme="dark"] .app-shell .completion-photo > span {
+  color: var(--text-success);
+  background-color: var(--surface-success);
+  font-size: 10px;
+}
+
+html.theme-transitioning,
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition:
+    color 460ms cubic-bezier(.2, .72, .25, 1),
+    background-color 460ms cubic-bezier(.2, .72, .25, 1),
+    background-image 460ms cubic-bezier(.2, .72, .25, 1),
+    border-color 460ms cubic-bezier(.2, .72, .25, 1),
+    box-shadow 460ms cubic-bezier(.2, .72, .25, 1),
+    fill 460ms cubic-bezier(.2, .72, .25, 1),
+    stroke 460ms cubic-bezier(.2, .72, .25, 1) !important;
+}

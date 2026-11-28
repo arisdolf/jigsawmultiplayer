@@ -1,4 +1,7 @@
 .app-modal {
+  position: fixed;
+  inset: 0;
+  margin: auto;
   width: min(460px,calc(100% - 30px));
   max-height: min(88vh,780px);
   padding: 0;

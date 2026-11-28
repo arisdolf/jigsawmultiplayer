@@ -22,27 +22,55 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 9px;
+  justify-content: space-between;
+  gap: 14px;
+  padding: clamp(12px,3vh,26px);
   color: #6e8799;
   background: rgba(234,241,247,.95);
   text-align: center;
 }
+.board-loading-skeleton {
+  display: grid;
+  width: min(760px,100%);
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  grid-template-rows: repeat(4,minmax(0,1fr));
+  gap: clamp(5px,1vw,12px);
+  margin: auto;
+}
+.board-loading-piece {
+  position: relative;
+  min-height: 0;
+  border: 1px solid rgba(205,218,228,.8);
+  border-radius: 12px;
+  background-color: #e5edf2;
+}
+.board-loading-piece::before,
+.board-loading-piece::after {
+  position: absolute;
+  z-index: 1;
+  width: 26%;
+  aspect-ratio: 1;
+  border: 1px solid rgba(205,218,228,.8);
+  border-radius: 50%;
+  background: #e8eff4;
+  content: '';
+}
+.board-loading-piece::before { top: -14%; left: 36%; }
+.board-loading-piece::after { top: 35%; right: -14%; }
+.board-loading-piece:nth-child(3n)::before { left: 12%; }
+.board-loading-piece:nth-child(4n)::after { top: 12%; }
+.board-loading-piece:nth-child(5n) { opacity: .68; }
+.board-loading-copy { display: flex; flex: 0 0 auto; flex-direction: column; align-items: center; gap: 8px; }
+.board-loading.has-error { justify-content: center; }
 .board-loading strong {
   color: #405f78;
   font: 500 21px var(--serif);
 }
-.board-loading > span {
+.board-loading-copy > span {
   color: #8698a5;
   font-size: 9px;
-}
-.loading-piece {
-  width: 29px;
-  height: 29px;
-  border: 5px solid #d5e1e9;
-  border-top-color: #6388a5;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
 }
 .loading-track {
   width: min(220px,60%);
@@ -58,11 +86,6 @@
   border-radius: inherit;
   background: #648dac;
   transition: width .2s;
-}
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 .canvas-zoom-controls {
   position: absolute;
@@ -107,6 +130,9 @@
 }
 .puzzle-piece-tray {
   display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .board-loading-piece { animation: none; }
 }
 @media (max-width: 760px) {
   .puzzle-piece-tray {

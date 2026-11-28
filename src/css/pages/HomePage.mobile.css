@@ -57,6 +57,9 @@
   .level-heading-line p {
     display: block;
   }
+  .home-level-grid .level-card-compact .level-description-placeholder {
+    display: flex;
+  }
   .level-details-row .level-stat:last-child {
     display: inline-flex;
   }

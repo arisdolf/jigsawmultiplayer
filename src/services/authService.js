@@ -70,6 +70,7 @@ export async function hasAdminClaim(user) {
 
 export async function logout() {
   if (firebaseReady) await signOut(auth)
-  sessionStorage.removeItem('jigsawmult-local-user')
+  localStorage.removeItem('jigsawmult-local-user')
+sessionStorage.removeItem('jigsawmult-local-user')
 }
 

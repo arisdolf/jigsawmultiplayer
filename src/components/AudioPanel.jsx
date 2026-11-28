@@ -1,12 +1,35 @@
 ﻿import { Music2, Volume2, VolumeX } from 'lucide-react'
 import Modal from './Modal'
+import { Monitor, Moon, Sun } from 'lucide-react'
 import '../css/components/AudioPanel.css'
 
-export default function AudioPanel({ open, onClose, audio }) {
+const THEME_CHOICES = [
+  { value: 'system', label: 'Follow system theme', title: 'System', Icon: Monitor },
+  { value: 'light', label: 'Always use light theme', title: 'Light', Icon: Sun },
+  { value: 'dark', label: 'Always use dark theme', title: 'Dark', Icon: Moon },
+]
+
+export default function AudioPanel({ open, onClose, audio, themePreference, setThemePreference }) {
   const { preferences, toggleMusic, toggleEffects, changeMusicVolume, changeEffectVolume } = audio
 
   return (
-    <Modal open={open} onClose={onClose} title="Set the room mood" description="Quiet music and little sounds, just how you like them." className="audio-modal">
+    <Modal open={open} onClose={onClose} title="Set the room mood" description="Choose an appearance, then tune the sounds." className="audio-modal">
+      <div className="audio-setting">
+        <div className="audio-setting-icon"><Monitor size={18} /></div>
+        <div className="audio-setting-main">
+          <div className="audio-setting-head">
+            <strong>Appearance</strong>
+            <div className="theme-choice-group" role="group" aria-label="Appearance mode">
+              {THEME_CHOICES.map(({ value, label, title, Icon }) => (
+                <button key={value} type="button" className="theme-choice" title={title} aria-label={label} aria-pressed={themePreference === value} onClick={() => setThemePreference(value)}>
+                  <Icon size={16} aria-hidden="true" />
+                </button>
+              ))}
+            </div>
+          </div>
+          <p>Follow your device or choose a fixed theme.</p>
+        </div>
+      </div>
       <div className="audio-setting">
         <div className="audio-setting-icon"><Music2 size={18} /></div>
         <div className="audio-setting-main">

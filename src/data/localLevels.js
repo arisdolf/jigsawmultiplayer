@@ -37,6 +37,7 @@ export function getLocalLevels() {
         imageURL: url,
         imageAlt: rules.imageAlt || '',
         imageRotation: rules.imageRotation || 0,
+        imageShiftUp: Number(rules.imageShiftUp) || 0,
         pieceCount: rules.pieceCount,
         difficulty: rules.difficulty,
         allowRotation: rules.allowRotation,

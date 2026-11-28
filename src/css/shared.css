@@ -242,50 +242,32 @@
 }
 .app-loading {
   display: flex;
-  min-height: 100vh;
+  min-height: 56vh;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 16px;
   color: #6e8799;
-  background: var(--blue-mist);
+  background: transparent;
 }
 .app-loading strong {
   font: 500 21px var(--serif);
 }
-.app-loading i {
+.data-skeleton {
   display: block;
-  width: 170px;
-  height: 8px;
-  border-radius: 9px;
-  background: linear-gradient(90deg,#e3ebf0,#f9fbfc,#e3ebf0);
+  border-radius: 8px;
+  background: linear-gradient(90deg,var(--line),var(--paper),var(--line));
   background-size: 200% 100%;
   animation: shimmer 1.3s linear infinite;
 }
-.app-loading i:nth-last-child(1) {
-  width: 100px;
-}
-.app-loading i:nth-last-child(2) {
-  width: 140px;
-}
-.skeleton-line {
-  height: 13px;
-  margin: 0 0 12px;
-  border-radius: 8px;
-  background: #e9eff3;
-}
-.skeleton-block {
-  height: 13px;
-  margin: 0 0 12px;
-  border-radius: 8px;
-  background: #e9eff3;
-}
-.skeleton-line.short {
-  width: 55%;
-}
-.skeleton-block {
-  height: 200px;
-  margin-top: 20px;
+.puzzles-loading-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 15px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
 }
 @media (max-width: 980px) {
   .page-wrap {

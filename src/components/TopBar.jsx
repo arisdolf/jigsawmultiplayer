@@ -15,7 +15,7 @@ const mobileLinks = [
   { id: 'profile', label: 'Profile', icon: UserRound },
 ]
 
-export default function TopBar({ screen, onNavigate, user, isAdmin, onSignIn, onSignOut, onProfile, audio, onBack, onAudioSettings }) {
+export default function TopBar({ screen, onNavigate, user, authLoading, isAdmin, onSignIn, onSignOut, onProfile, audio, backLabel = 'Back', onBack, onAudioSettings }) {
   const inGame = screen === 'game'
 
   return (
@@ -23,7 +23,7 @@ export default function TopBar({ screen, onNavigate, user, isAdmin, onSignIn, on
       <header className={`topbar ${inGame ? 'topbar-game' : ''}`}>
         <div className="topbar-main">
           <div className="topbar-left">
-            {inGame && <button className="icon-button back-button" type="button" onClick={onBack} aria-label="Back to room"><ArrowLeft size={18} /></button>}
+            {inGame && <button className="icon-button back-button" type="button" onClick={onBack} aria-label={backLabel}><ArrowLeft size={18} /></button>}
             <button className="brand" type="button" onClick={() => onNavigate('home')} aria-label="JigsawMult home">
               <span className="brand-mark"><Puzzle size={18} strokeWidth={2.4} /></span>
               <span className="brand-word">Jigsaw<span>Mult</span></span>
@@ -49,9 +49,11 @@ export default function TopBar({ screen, onNavigate, user, isAdmin, onSignIn, on
               <button type="button" className={`sound-quick sound-effect-quick ${audio.preferences.effectEnabled ? 'is-on' : ''}`} aria-label={audio.preferences.effectEnabled ? 'Mute sound effects' : 'Enable sound effects'} aria-pressed={audio.preferences.effectEnabled} onClick={audio.toggleEffects}>
                 {audio.preferences.effectEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
               </button>
-              <button type="button" className="sound-settings-button" onClick={onAudioSettings} aria-label="Audio settings"><Settings2 size={15} /></button>
+              <button type="button" className="sound-settings-button" onClick={onAudioSettings} aria-label="Room settings"><Settings2 size={15} /></button>
             </div>
-            {user ? (
+            {authLoading ? (
+              <span className="account-loading" aria-hidden="true"><span className="data-skeleton account-loading-avatar" /><span className="data-skeleton account-loading-name" /></span>
+            ) : user ? (
               <div className="account-menu">
                 <button type="button" className="account-trigger" onClick={onProfile} aria-label={`Open profile for ${user.displayName || 'Puzzle Pal'}`}>
                   <Avatar player={user} size="sm" />

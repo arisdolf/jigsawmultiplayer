@@ -12,16 +12,19 @@ import {
   sendRoomMessage,
   setRoomStatus,
   subscribeRoom,
-  updateRoomSettings,
   movePieces,
   releasePieces,
   enterSharedRoom, 
+  heartbeatShared,
+  isSharedRoomId,
   recordSharedCompletion, 
   tickSharedClock
 } from '../services/roomService'
 import { playSound } from '../services/audioManager'
 
 const emptyRoom = { id: null, meta: null, players: [], game: {}, chat: [] }
+
+
 
 
 export function useRoom(roomId, user) {
@@ -31,7 +34,7 @@ export function useRoom(roomId, user) {
   const piecesRef = useRef({})
   const pieceListeners = useRef(new Set())
 const enterShared = useCallback((options) => enterSharedRoom({ ...options, user: options.user || user }), [user])
-const completeShared = useCallback((details) => recordSharedCompletion(details), [])
+const completeShared = useCallback((details) => recordSharedCompletion({ ...details, uid: user?.uid }), [user?.uid])
 const tickClock = useCallback(() => tickSharedClock(roomId), [roomId])
   useEffect(() => {
      // always wipe the previous room's data first
@@ -118,10 +121,17 @@ const tickClock = useCallback(() => tickSharedClock(roomId), [roomId])
     return () => pieceListeners.current.delete(listener)
   }, [])
 
+  useEffect(() => {
+  if (!roomId || !user || !isSharedRoomId(roomId)) return undefined
+  const beat = () => heartbeatShared(roomId, user).catch(() => {})
+  beat()
+  const timer = setInterval(beat, 20000)
+  return () => clearInterval(timer)
+}, [roomId, user?.uid])
+  
   const create = useCallback((options) => createRoom({ ...options, user: options.user || user }), [user])
   const join = useCallback((options) => joinRoom({ ...options, user: options.user || user }), [user])
   const leave = useCallback(() => leaveRoom(roomId, user), [roomId, user])
-  const updateSettings = useCallback((changes) => updateRoomSettings(roomId, changes, user), [roomId, user])
   const controlStatus = useCallback((status) => setRoomStatus(roomId, status, user), [roomId, user])
   const prepare = useCallback((pieces) => initializePuzzle(roomId, pieces, user), [roomId, user])
   const reset = useCallback((levelId) => resetRoomPuzzle(roomId, levelId, user), [roomId, user])
@@ -142,7 +152,6 @@ const tickClock = useCallback(() => tickSharedClock(roomId), [roomId])
     create,
     join,
     leave,
-    updateSettings,
     controlStatus,
     prepare,
     reset,
@@ -156,4 +165,5 @@ const tickClock = useCallback(() => tickSharedClock(roomId), [roomId])
     enterShared, completeShared, tickClock,
   }
 }
+
 

@@ -76,6 +76,38 @@
   box-shadow: 0 26px 58px rgba(47,76,99,.12);
   transform: rotate(.7deg);
 }
+.hero-art-loading {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  background: linear-gradient(145deg,#91a7b7,#71899b);
+}
+.hero-art-loading .hero-art-caption {
+  align-items: end;
+}
+.hero-title-skeleton {
+  width: min(260px, 70%);
+  height: 34px;
+  margin: 5px 0 9px;
+  background: linear-gradient(90deg,rgba(241,246,249,.3),rgba(255,255,255,.7),rgba(241,246,249,.3));
+  background-size: 200% 100%;
+}
+.hero-meta-skeleton {
+  width: 155px;
+  height: 11px;
+  background: linear-gradient(90deg,rgba(241,246,249,.25),rgba(255,255,255,.6),rgba(241,246,249,.25));
+  background-size: 200% 100%;
+}
+.hero-index-skeleton {
+  width: 34px;
+  height: 12px;
+  background: linear-gradient(90deg,rgba(241,246,249,.25),rgba(255,255,255,.6),rgba(241,246,249,.25));
+  background-size: 200% 100%;
+}
+.hero-art-caption span.data-skeleton {
+  display: block;
+}
 .hero-image-frame {
   position: absolute;
   inset: 0;
@@ -314,8 +346,70 @@
 .home-level-grid {
   grid-template-columns: repeat(3,minmax(0,1fr));
 }
-.home-level-grid .level-skeleton {
-  min-height: 280px;
+.home-greeting-placeholder {
+  width: 112px;
+  height: 22px;
+  border-radius: 6px;
+}
+.home-stat-placeholder {
+  width: 32px;
+  height: 18px;
+  border-radius: 5px;
+}
+.recent-card-skeleton {
+  pointer-events: none;
+  cursor: default;
+}
+.recent-card-skeleton .recent-thumb .data-skeleton {
+  width: 100%;
+  height: 100%;
+}
+.recent-card-skeleton .recent-info > i {
+  display: block;
+  height: 11px;
+  border-radius: 6px;
+}
+.recent-card-skeleton .recent-info > i:first-child {
+  width: 72%;
+  height: 16px;
+}
+.recent-card-skeleton .recent-info > i:nth-child(2) {
+  width: 58%;
+}
+.recent-card-skeleton .recent-info > i:last-child {
+  width: 35%;
+  margin-top: 6px;
+}
+.recent-puzzle-loading {
+  pointer-events: none;
+  cursor: default;
+}
+.recent-puzzle-row .recent-puzzle-image-placeholder {
+  width: 47px;
+  height: 44px;
+  flex: 0 0 47px;
+  border-radius: 9px;
+}
+.recent-puzzle-row .recent-puzzle-copy-placeholder {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+}
+.recent-puzzle-row .recent-puzzle-copy-placeholder i {
+  height: 10px;
+}
+.recent-puzzle-row .recent-puzzle-copy-placeholder i:first-child {
+  width: min(150px,80%);
+  height: 12px;
+}
+.recent-puzzle-row .recent-puzzle-copy-placeholder i:last-child {
+  width: 68%;
+}
+.recent-puzzle-row .recent-puzzle-arrow-placeholder {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  border-radius: 5px;
 }
 .home-lower-grid {
   display: grid;

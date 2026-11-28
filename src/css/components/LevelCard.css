@@ -34,6 +34,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center calc(50% - var(--level-image-shift-up,0px));
   rotate: var(--level-image-rotation, 0deg);
   transition: rotate .35s ease, transform .45s ease;
 }
@@ -86,7 +87,9 @@
   font-size: 9px;
   font-weight: 750;
 }
-.level-image-status.is-complete {
+.library-grid .level-image-status.is-complete {
+  top: 12px;
+  bottom: auto;
   color: #507a62;
 }
 .level-open-icon {
@@ -179,12 +182,91 @@
 .level-card-compact .level-image-button {
   height: 154px;
 }
-.level-skeleton {
-  min-height: 305px;
-  border-radius: 18px;
-  background: linear-gradient(100deg,#edf2f6 25%,#f7f9fb 38%,#edf2f6 62%);
-  background-size: 400% 100%;
-  animation: shimmer 1.6s ease infinite;
+.level-card-skeleton {
+  pointer-events: none;
+}
+.level-card-skeleton .level-image-button {
+  cursor: default;
+}
+.level-image-placeholder {
+  position: absolute;
+  inset: 0;
+}
+.level-number-placeholder {
+  position: absolute;
+  z-index: 1;
+  top: 12px;
+  left: 13px;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+}
+.level-open-placeholder {
+  position: absolute;
+  z-index: 1;
+  right: 14px;
+  bottom: 12px;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: var(--paper);
+}
+.level-skeleton-copy {
+  min-width: 0;
+  flex: 1;
+}
+.level-title-placeholder {
+  width: min(150px,100%);
+  height: 18px;
+}
+.level-description-placeholder {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  background: none;
+  animation: none;
+}
+.level-description-placeholder i:first-child {
+  width: 94%;
+  height: 6px;
+}
+.level-description-placeholder i:last-child {
+  width: 64%;
+  height: 6px;
+}
+.level-difficulty-placeholder {
+  width: 54px;
+  height: 21px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+}
+.level-piece-count-placeholder {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.level-piece-count-placeholder i:first-child {
+  width: 25px;
+  height: 10px;
+}
+.level-piece-count-placeholder i:last-child {
+  width: 25px;
+  height: 8px;
+}
+.level-stat-icon-placeholder {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+.level-stat-value-placeholder {
+  width: 18px;
+  height: 8px;
+}
+.level-stat-time-placeholder {
+  width: 42px;
+  height: 8px;
 }
 @media (max-width: 760px) {
   .level-card-compact .level-image-button {
@@ -198,6 +280,12 @@
   }
   .level-heading-line p {
     display: none;
+  }
+  .level-card-compact .level-description-placeholder {
+    display: none;
+  }
+  .library-grid .level-description-placeholder {
+    min-height: 28px;
   }
   .level-heading-line {
     flex-direction: column;

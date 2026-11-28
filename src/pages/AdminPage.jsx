@@ -1,4 +1,5 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import PageLoadingSkeleton from '../components/PageLoadingSkeleton'
 import { ArrowDown, ArrowUp, Check, ImagePlus, LockKeyhole, RotateCcw, RotateCw, Save, ShieldCheck, ToggleLeft, ToggleRight, UploadCloud } from 'lucide-react'
 import { uploadLevelImage } from '../services/storageService'
 import '../css/pages/AdminPage.css'
@@ -25,7 +26,7 @@ function newLevel(order) {
   }
 }
 
-export default function AdminPage({ levels, isAdmin, firebaseReady, onSave, onReload }) {
+export default function AdminPage({ levels, loading = false, isAdmin, firebaseReady, onSave, onReload }) {
   const ordered = useMemo(() => [...levels].sort((a, b) => a.order - b.order), [levels])
   const [selectedId, setSelectedId] = useState(ordered[0]?.id || '')
   const [draft, setDraft] = useState(ordered[0] || null)
@@ -47,6 +48,8 @@ export default function AdminPage({ levels, isAdmin, firebaseReady, onSave, onRe
   }, [ordered, selectedId])
 
   if (!isAdmin) return <main className="page-wrap access-denied"><ShieldCheck size={28} /><h1>Admin access needed</h1><p>This level studio accepts Firebase accounts with the admin custom claim.</p></main>
+
+  if (loading) return <PageLoadingSkeleton screen="admin" />
 
   function change(key, value) {
     setDraft((current) => ({ ...current, [key]: value }))

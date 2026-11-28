@@ -4,7 +4,7 @@ import { generatePuzzlePieces, getPiecePath, isCorrectPlacement } from '../utils
 import { SpatialIndex } from '../utils/spatialIndex'
 import '../css/components/PuzzleBoard.css'
 
-const ZOOM_MIN = 0.08
+const ZOOM_MIN = 0.02
 const ZOOM_MAX = 2.5
 const PATH_CACHE_LIMIT = 600
 const NEIGHBORS = [[-1, 0], [1, 0], [0, -1], [0, 1]]
@@ -59,12 +59,13 @@ export default function PuzzleBoard({
   resetToken = 0,
   disabled = false,
   referenceVisible,
+  referenceOpacity = 0.16,
   onGenerated,
   onReadyChange,
   onSound,
   celebrate = false,
   onCelebrationEnd,
-    fullscreen = false,
+  fullscreen = false,
 }) {
   const canvasRef = useRef(null)
   const containerRef = useRef(null)
@@ -75,7 +76,7 @@ export default function PuzzleBoard({
   const pathCacheRef = useRef(new Map())
   const groupsRef = useRef(new Map())
   const indexRef = useRef(null)
-    const fittedRef = useRef(false)
+  const fittedRef = useRef(false)
   const landscapeRef = useRef(null)
   const viewRef = useRef({ scale: 1, panX: 0, panY: 0 })
   const roomStatusRef = useRef(level.roomStatus)
@@ -87,8 +88,8 @@ export default function PuzzleBoard({
   const seededRef = useRef(false)
   const lastTapRef = useRef(null)
   const celebrationRef = useRef(null)
-    const spritesRef = useRef(new Map())
-      const sceneRef = useRef({ canvas: null, dirty: true, excluded: new Set() })
+  const spritesRef = useRef(new Map())
+  const sceneRef = useRef({ canvas: null, dirty: true, excluded: new Set() })
   const spriteInfoRef = useRef({ margin: 0, scale: 1, layerScale: 1 })
   const placedLayerRef = useRef(null)
   const paintedRef = useRef(new Set())
@@ -203,7 +204,7 @@ export default function PuzzleBoard({
           })
         })
         fittedRef.current = false
-                gridRef.current = grid
+        gridRef.current = grid
         boardImageRef.current = imageCanvas
         piecesRef.current = pieceMap
         rebuildGroups()
@@ -211,7 +212,7 @@ export default function PuzzleBoard({
         // sprites: sized so the biggest stays under ~190px
         const margin = grid.cellSize * 0.42
         const scale = Math.min(2, 190 / (grid.cellSize + margin * 2))
-                const layerScale = Math.min(IS_TOUCH ? 1 : 1.6, 3000 / Math.max(grid.width, grid.height))
+        const layerScale = Math.min(IS_TOUCH ? 1 : 1.6, 3000 / Math.max(grid.width, grid.height))
         spriteInfoRef.current = { margin, scale, layerScale }
         spritesRef.current = new Map()
         placedLayerRef.current = null
@@ -291,7 +292,7 @@ export default function PuzzleBoard({
     }
     const local = piecesRef.current.get(event.piece.id)
     if (!local) return
-        const drag = dragRef.current
+    const drag = dragRef.current
     const carried = drag?.kind === 'piece' && drag.members.some((member) => member.piece.id === event.piece.id)
     // our own drag echoing back from Firebase: nothing to do
     if (carried && event.piece.movingBy === user.uid && !event.piece.placed) return
@@ -348,7 +349,7 @@ export default function PuzzleBoard({
     rafRef.current = 0
   }, [])
 
-   useEffect(() => {
+  useEffect(() => {
     const canvas = canvasRef.current
     const container = containerRef.current
     if (!canvas || !container) return undefined
@@ -375,7 +376,7 @@ export default function PuzzleBoard({
     resize()
     return () => observer.disconnect()
   }, [generation.ready])
-    useEffect(() => { markDirty(); drawRef.current?.() }, [referenceVisible])
+  useEffect(() => { markDirty(); drawRef.current?.() }, [referenceVisible, referenceOpacity])
   // entering / leaving full screen: fit the board to the new size
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -423,16 +424,17 @@ export default function PuzzleBoard({
     const boardRadius = Math.min(22, grid.cellSize * 0.2)
     context.setTransform(dpr, 0, 0, dpr, 0, 0)
     context.clearRect(0, 0, width, height)
-    context.fillStyle = '#e5edf2'
+    context.fillStyle = '#f3eee5'
     context.fillRect(0, 0, width, height)
     context.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.panX, dpr * view.panY)
 
     const scene = sceneRef.current
-    const useCache = !celebration && view.scale <= cacheScale(grid) * 1.25
+    const useCache = !celebration && view.scale <= cacheScale(scene.bounds || grid.bounds) * 1.25
     let live
     if (useCache) {
       if (scene.dirty || !scene.canvas) buildScene(grid, image)
-      context.drawImage(scene.canvas, bounds.x, bounds.y, bounds.width, bounds.height)
+      const sb = scene.bounds
+      context.drawImage(scene.canvas, sb.x, sb.y, sb.width, sb.height)
       live = [...scene.excluded].map((id) => piecesRef.current.get(id)).filter((piece) => piece && !piece.placed)
     } else {
       scene.dirty = true // cache goes stale while drawing live
@@ -516,7 +518,7 @@ export default function PuzzleBoard({
       renderRef.current?.()
     })
   }
-    const markDirty = () => { sceneRef.current.dirty = true }
+  const markDirty = () => { sceneRef.current.dirty = true }
 
   // pieces that must be drawn live on top of the cache (held, selected, or moved by someone else)
   function isLive(piece) {
@@ -526,21 +528,30 @@ export default function PuzzleBoard({
     return Boolean(piece.movingBy && Number(piece.lockUntil) > Date.now())
   }
 
-  function cacheScale(grid) {
-    const b = grid.bounds
-    return Math.min(1, (IS_TOUCH ? 2200 : 3200) / Math.max(b.width, b.height))
+  function cacheScale(bounds) {
+    return Math.min(1, (IS_TOUCH ? 2200 : 3200) / Math.max(bounds.width, bounds.height))
+  }
+
+  // the area the cached bitmap must cover: the board plus wherever loose pieces ended up
+  function tableBounds(grid) {
+    let left = grid.bounds.x
+    let top = grid.bounds.y
+    let right = grid.bounds.x + grid.bounds.width
+    let bottom = grid.bounds.y + grid.bounds.height
+    piecesRef.current.forEach((piece) => {
+      if (piece.placed) return
+      left = Math.min(left, piece.x)
+      top = Math.min(top, piece.y)
+      right = Math.max(right, piece.x + piece.width)
+      bottom = Math.max(bottom, piece.y + piece.height)
+    })
+    const pad = grid.cellSize * 2
+    return { x: left - pad, y: top - pad, width: right - left + pad * 2, height: bottom - top + pad * 2 }
   }
 
   function drawBackdrop(context, grid, image, px, shadows) {
-    const bounds = grid.bounds
+
     const radius = Math.min(22, grid.cellSize * 0.2)
-    context.fillStyle = '#f3eee5'
-    context.strokeStyle = 'rgba(82, 127, 168, 0.18)'
-    context.lineWidth = px
-    context.beginPath()
-    context.roundRect(bounds.x, bounds.y, bounds.width, bounds.height, radius * 1.5)
-    context.fill()
-    context.stroke()
 
     context.save()
     if (shadows) {
@@ -556,7 +567,7 @@ export default function PuzzleBoard({
 
     if (referenceVisible && image && !celebrationRef.current) {
       context.save()
-      context.globalAlpha = 0.16
+      context.globalAlpha = referenceOpacity
       context.beginPath()
       context.roundRect(0, 0, grid.width, grid.height, radius)
       context.clip()
@@ -593,8 +604,9 @@ export default function PuzzleBoard({
   // bakes table + board + placed + every idle loose piece into one bitmap
   function buildScene(grid, image) {
     const scene = sceneRef.current
-    const bounds = grid.bounds
-    const scale = cacheScale(grid)
+    const bounds = tableBounds(grid)
+    scene.bounds = bounds
+    const scale = cacheScale(bounds)
     const w = Math.ceil(bounds.width * scale)
     const h = Math.ceil(bounds.height * scale)
     if (!scene.canvas || scene.canvas.width !== w || scene.canvas.height !== h) {
@@ -618,7 +630,7 @@ export default function PuzzleBoard({
     scene.excluded = excluded
     scene.dirty = false
   }
-    // one pre-rendered bitmap per piece: image clipped to the piece shape + baked outline
+  // one pre-rendered bitmap per piece: image clipped to the piece shape + baked outline
   function buildSprite(piece, grid, image) {
     const { margin, scale } = spriteInfoRef.current
     const size = Math.ceil((piece.width + margin * 2) * scale)
@@ -764,7 +776,7 @@ export default function PuzzleBoard({
     all.forEach((member) => {
       regroup(member, key)
       member.stackOrder = now
-            flash(member, now)
+      flash(member, now)
     })
     return all
   }
@@ -822,7 +834,7 @@ export default function PuzzleBoard({
   }
 
   function grabPiece(piece, event, point) {
-    
+
     const world = screenToWorld(point, viewRef.current)
     const members = groupMembers(piece)
     const leader = members.reduce((a, b) => (a.id < b.id ? a : b))
@@ -880,7 +892,7 @@ export default function PuzzleBoard({
     drawRef.current?.()
     if (!drag.locked) return
     const now = Date.now()
-        if (now - lastWriteRef.current.at > (IS_TOUCH ? 220 : 120) && !lastWriteRef.current.pending) {
+    if (now - lastWriteRef.current.at > (IS_TOUCH ? 220 : 120) && !lastWriteRef.current.pending) {
       lastWriteRef.current.at = now
       lastWriteRef.current.pending = roomControl.moveMany(drag.members.map((member) => ({ id: member.piece.id, x: member.piece.x, y: member.piece.y, rotation: member.piece.rotation || 0 })))
         .catch(() => { })
@@ -943,11 +955,11 @@ export default function PuzzleBoard({
         member.piece.y = member.originalY
         indexRef.current.update(member.piece)
       })
-          drag.members.forEach((member) => syncPlaced(member.piece))
+      drag.members.forEach((member) => syncPlaced(member.piece))
       drawRef.current?.()
       return
     }
-    
+
     if (!correct) {
       const joined = upright ? connectGroup(members) : null
       if (joined) {
@@ -1139,14 +1151,14 @@ export default function PuzzleBoard({
   }
 
   async function rotateSelected() {
-   
+
     const piece = selectedPieceRef.current
     if (!level.allowRotation || !piece || piece.placed) return
     if (groupMembers(piece).length > 1) return // joined pieces can't be rotated
     piece.rotation = ((piece.rotation || 0) + 90) % 360
     indexRef.current.update(piece)
     drawRef.current?.()
-     onSound('rotate')   // replaces onSound('pickup') in tapWhileCarrying; add to rotateSelected
+    onSound('rotate')   // replaces onSound('pickup') in tapWhileCarrying; add to rotateSelected
     // a carried piece saves its rotation when it is dropped
     if (dragRef.current?.piece === piece) return
     await roomControl.release(piece.id, { x: piece.x, y: piece.y, placed: false, rotation: piece.rotation })
@@ -1225,7 +1237,7 @@ export default function PuzzleBoard({
     }
   }
 
-  
+
   function changeZoom(nextZoom, anchor) {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -1257,11 +1269,13 @@ export default function PuzzleBoard({
   return (
     <div ref={containerRef} className={`puzzle-canvas-shell ${celebrate ? 'is-celebrating' : ''} ${rising ? 'is-rising' : ''}`} aria-label={`${level.title} puzzle workspace`}>
       {!generation.ready && (
-        <div className="board-loading" role="status" aria-live="polite">
-          <div className="loading-piece" aria-hidden="true" />
-          <strong>{generation.error ? 'Puzzle unavailable' : 'Setting the table'}</strong>
-          <span>{generation.error || `Preparing ${level.pieceCount.toLocaleString()} pieces · ${Math.round(generation.progress * 100)}%`}</span>
-          {!generation.error && <div className="loading-track"><i style={{ width: `${generation.progress * 100}%` }} /></div>}
+        <div className={`board-loading ${generation.error ? 'has-error' : ''}`} role="status" aria-live="polite">
+          {!generation.error && <div className="board-loading-skeleton" aria-hidden="true">{Array.from({ length: 16 }, (_, index) => <span className="data-skeleton board-loading-piece" key={index} />)}</div>}
+          <div className="board-loading-copy">
+            <strong>{generation.error ? 'Puzzle unavailable' : 'Setting the table'}</strong>
+            <span>{generation.error || `Preparing ${level.pieceCount.toLocaleString()} pieces · ${Math.round(generation.progress * 100)}%`}</span>
+            {!generation.error && <div className="loading-track"><i style={{ width: `${generation.progress * 100}%` }} /></div>}
+          </div>
         </div>
       )}
       <canvas

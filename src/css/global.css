@@ -1,8 +1,8 @@
 @import "tailwindcss";
 :root {
   font-family: "DM Sans", "Segoe UI", sans-serif;
-  color: #203d57;
-  background: #eaf1f7;
+  color: var(--text-primary);
+  background: var(--surface-page);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -27,6 +27,15 @@
   --semantic-surface: var(--color-paper-50);
   --semantic-border: var(--color-line-200);
   --semantic-muted: var(--color-muted-500);
+  --surface-page: var(--color-blue-50);
+  --surface-card: var(--color-paper-50);
+  --surface-raised: #ffffff;
+  --surface-soft: #f1f5f8;
+  --surface-control: #ffffff;
+  --text-primary: var(--color-blue-950);
+  --text-secondary: var(--color-muted-500);
+  --text-subtle: #8a9aa8;
+  --border-default: var(--color-line-200);
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
