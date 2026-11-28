@@ -78,10 +78,10 @@ body .board-frame.is-fullscreen .canvas-zoom-controls {
   body .audio-setting-head { font-size: 14px; }
   body .audio-setting-main p { font-size: 12px; }
   body .audio-note { font-size: 11px; }
-  body .profile-heading p:last-child, body .profile-stat-row { font-size: 12px; }
+  body .profile-heading p:last-child, body .profile-stat-card small { font-size: 12px; }
   body .profile-completion-list strong { font-size: 13px; }
   body .profile-completion-list small { font-size: 11px; }
-  body .profile-achievements span { font-size: 11px; }
+  body .profile-achievement-status { font-size: 10px; }
   body .toast { font-size: 13px; }
 
   /* game screen */

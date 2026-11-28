@@ -18,6 +18,37 @@ const SETTLE_MS = 80 // drop settle
 const easeOutBack = (t) => 1 + 2.70158 * Math.pow(t - 1, 3) + 1.70158 * Math.pow(t - 1, 2)
 const IS_TOUCH = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches
 
+const SKEL = { rows: 6, columns: 4, cell: 60 }
+const SKEL_GRID = { rows: SKEL.rows, columns: SKEL.columns, count: SKEL.rows * SKEL.columns, cellSize: SKEL.cell, seed: 'skeleton' }
+const SKEL_PIECES = Array.from({ length: SKEL_GRID.count }, (_, i) => {
+  const row = Math.floor(i / SKEL.columns)
+  const column = i % SKEL.columns
+  return { id: i, row, column, d: getPiecePath({ row, column, width: SKEL.cell, height: SKEL.cell }, SKEL_GRID) }
+})
+
+function JigsawSkeleton() {
+  const pad = SKEL.cell * 0.4
+  return (
+    <svg className="board-loading-jigsaw" viewBox={`${-pad} ${-pad} ${SKEL.columns * SKEL.cell + pad * 2} ${SKEL.rows * SKEL.cell + pad * 2}`} aria-hidden="true">
+      {SKEL_PIECES.map((p) => (
+        <path
+          key={p.id}
+          d={p.d}
+          transform={`translate(${p.column * SKEL.cell} ${p.row * SKEL.cell})`}
+          className="jigsaw-skel-piece"
+          style={{ animationDelay: `${(p.row + p.column) * 0.12}s` }}
+        />
+      ))}
+    </svg>
+  )
+}
+
+const PALETTE = {
+  light: { table: '#f3eee5', board: '#fafcff', shadow: 'rgba(41, 76, 112, 0.14)', rim: '36, 50, 68' },
+  dark: { table: '#243244', board: '#34475f', shadow: 'rgba(0, 0, 0, 0.35)', rim: '255, 255, 255' },
+}
+const readTheme = () => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light')
+
 // lower pixel ratio on phones = far fewer pixels to paint every frame
 function getDpr(count = 0) {
   let dpr = Math.min(window.devicePixelRatio || 1, IS_TOUCH ? 1.5 : 2)
@@ -31,6 +62,7 @@ function normalizeImageRotation(value) {
 }
 
 function makeBoardImage(source, grid, rotation = 0) {
+
   const quarterTurn = rotation % 180 !== 0
   const orientedWidth = quarterTurn ? source.naturalHeight : source.naturalWidth
   const orientedHeight = quarterTurn ? source.naturalWidth : source.naturalHeight
@@ -74,6 +106,7 @@ export default function PuzzleBoard({
   onCelebrationEnd,
   fullscreen = false,
 }) {
+  const paletteRef = useRef(PALETTE[readTheme()])
   const canvasRef = useRef(null)
   const containerRef = useRef(null)
   const workerRef = useRef(null)
@@ -140,6 +173,20 @@ export default function PuzzleBoard({
       celebrationRef.current = null
     }
   }, [celebrate, generation.ready])
+
+
+  useEffect(() => {
+    const apply = () => {
+      paletteRef.current = PALETTE[readTheme()]
+      markDirty() // the cached scene bakes in the colors, so rebuild it
+      drawRef.current?.()
+    }
+    apply()
+    const observer = new MutationObserver(apply)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => observer.disconnect()
+  }, [])
+
 
   useEffect(() => {
     let cancelled = false
@@ -438,7 +485,7 @@ export default function PuzzleBoard({
     const boardRadius = Math.min(22, grid.cellSize * 0.2)
     context.setTransform(dpr, 0, 0, dpr, 0, 0)
     context.clearRect(0, 0, width, height)
-    context.fillStyle = '#f3eee5'
+    context.fillStyle = paletteRef.current.table
     context.fillRect(0, 0, width, height)
     context.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.panX, dpr * view.panY)
 
@@ -524,7 +571,7 @@ export default function PuzzleBoard({
     })
 
     flashingRef.current.forEach((piece) => {
-     const glow = Math.max(0, 1 - (now - (piece.flashAt || 0)) / 700)
+      const glow = Math.max(0, 1 - (now - (piece.flashAt || 0)) / 700)
       if (glow <= 0) { flashingRef.current.delete(piece); return }
       animating = true
       if (celebration) return
@@ -612,11 +659,11 @@ export default function PuzzleBoard({
 
     context.save()
     if (shadows) {
-      context.shadowColor = 'rgba(41, 76, 112, 0.14)'
+      context.shadowColor = paletteRef.current.shadow
       context.shadowBlur = 24
       context.shadowOffsetY = 10
     }
-    context.fillStyle = '#fafcff'
+    context.fillStyle = paletteRef.current.board
     context.beginPath()
     context.roundRect(0, 0, grid.width, grid.height, radius)
     context.fill()
@@ -634,30 +681,23 @@ export default function PuzzleBoard({
     if (placedLayerRef.current) context.drawImage(placedLayerRef.current, 0, 0, grid.width, grid.height)
   }
 
-  function drawSprite(context, piece, px, active = false, selected = false, scale = 1, lift = 1) {
-    const sprite = spritesRef.current.get(piece.id)
-    if (!sprite) return
-    const { margin } = spriteInfoRef.current
-    const size = piece.width + margin * 2
-    context.save()
-    context.translate(piece.x + piece.width / 2, piece.y + piece.height / 2)
-    context.rotate(((piece.rotation || 0) * Math.PI) / 180)
-    if (scale !== 1) context.scale(scale, scale)
-    if (active) {
-      context.shadowColor = 'rgba(41, 76, 112, 0.36)'
-      context.shadowBlur = (IS_TOUCH ? 8 : 20) * px * lift
-      context.shadowOffsetY = 4 * px * lift
-    }
-    context.drawImage(sprite, -piece.width / 2 - margin, -piece.height / 2 - margin, size, size)
-    if (selected) {
-      context.shadowColor = 'transparent'
-      context.translate(-piece.width / 2, -piece.height / 2)
-      context.strokeStyle = 'rgba(217, 104, 104, 0.9)'
-      context.lineWidth = 2.4 * px
-      context.stroke(piecePath(piece))
-    }
-    context.restore()
+ function drawSprite(context, piece, px, active = false, selected = false, scale = 1, lift = 1) {
+  const sprite = spritesRef.current.get(piece.id)
+  if (!sprite) return
+  const { margin } = spriteInfoRef.current
+  const size = piece.width + margin * 2
+  context.save()
+  context.translate(piece.x + piece.width / 2, piece.y + piece.height / 2)
+  context.rotate(((piece.rotation || 0) * Math.PI) / 180)
+  if (scale !== 1) context.scale(scale, scale)
+  if (active) {
+    context.shadowColor = `rgba(0, 0, 0, ${0.18 * lift})`
+    context.shadowBlur = (IS_TOUCH ? 6 : 12) * lift
+    context.shadowOffsetY = 3 * lift
   }
+  context.drawImage(sprite, -piece.width / 2 - margin, -piece.height / 2 - margin, size, size)
+  context.restore()
+}
 
   // bakes table + board + placed + every idle loose piece into one bitmap
   function buildScene(grid, image) {
@@ -1337,7 +1377,7 @@ export default function PuzzleBoard({
     <div ref={containerRef} className={`puzzle-canvas-shell ${celebrate ? 'is-celebrating' : ''} ${rising ? 'is-rising' : ''}`} aria-label={`${level.title} puzzle workspace`}>
       {!generation.ready && (
         <div className={`board-loading ${generation.error ? 'has-error' : ''}`} role="status" aria-live="polite">
-          {!generation.error && <div className="board-loading-skeleton" aria-hidden="true">{Array.from({ length: 16 }, (_, index) => <span className="data-skeleton board-loading-piece" key={index} />)}</div>}
+          {!generation.error && <JigsawSkeleton />}
           <div className="board-loading-copy">
             <strong>{generation.error ? 'Puzzle unavailable' : 'Setting the table'}</strong>
             <span>{generation.error || `Preparing ${level.pieceCount.toLocaleString()} pieces · ${Math.round(generation.progress * 100)}%`}</span>

@@ -1,11 +1,11 @@
-// One knob style only: a round head on a narrow neck, centered on the edge,
-// exactly like the reference sheet. Variety comes from every edge randomly
-// being a tab or a blank, so you get corner, edge, 1/2/3/4-tab pieces, etc.
-const SHAPE = { center: 0.5, neck: 0.07, head: 0.13, rise: 0.03, flare: 0.035 }
+
+// Mushroom knob: round head on a narrow neck. Position and waviness vary per edge
+const SHAPE = { neck: 0.055, head: 0.14, rise: 0.045, flare: 0.04 }
 
 const MAX_PIECES = 5000
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 const round2 = (value) => Math.round(value * 100) / 100
+const unit = (hash, shift) => ((hash >>> shift) & 255) / 255
 
 function hash32(value) {
   let hash = 2166136261
@@ -38,42 +38,37 @@ function getGrid(pieceCount, imageAspect = 1.5) {
   return best
 }
 
-// Deterministic per level (seed = level id) so every player in the room
-// gets identical piece shapes, but each level has its own random layout.
+// Deterministic per level and per edge, so both neighbours get the same shape.
 function getEdgeStyle(axis, x, y, seed = '') {
   const hash = hash32(`${seed}|${axis}:${x}:${y}`)
-  return { style: 0, positiveSideHasTab: ((hash >>> 16) & 1) === 0 }
+  const extra = hash32(`${seed}|shape|${axis}:${x}:${y}`)
+  return {
+    positiveSideHasTab: ((hash >>> 16) & 1) === 0,
+    center: 0.4 + unit(extra, 0) * 0.2,        // knob sits between 40% and 60% along the edge
+    waveA: (unit(extra, 8) - 0.5) * 0.09,      // gentle wobble before the knob
+    waveB: (unit(extra, 16) - 0.5) * 0.09,     // gentle wobble after the knob
+  }
 }
 
-// Classic knob, drawn along one edge from u=0 to u=1.
-// v is how far the knob sticks out (as a fraction of the edge length).
-function knobProfile({ center: c, neck: n, head: r, rise: h, flare: f } = SHAPE) {
-  const hc = h + r * 0.9 // height of the head's center
-  const anchors = [
-    [0, 0],
-    [c - n - f, 0],
-    [c - n, h],
-    [c - r, hc],
-    [c, hc + r],
-    [c + r, hc],
-    [c + n, h],
-    [c + n + f, 0],
-    [1, 0],
+// One edge as cubic segments, in world order (u from 0 to 1). v is how far it sticks out.
+function knobSegments({ center: c, waveA, waveB }) {
+  const { neck: n, head: r, rise: h, flare: f } = SHAPE
+  const hc = h + r * 0.9
+  const a = c - n - f
+  const b = c + n + f
+  return [
+    [[0, 0], [a * 0.35, waveA], [a * 0.7, -waveA * 0.6], [a, 0]],
+    [[a, 0], [c - n - f * 0.3, 0], [c - n, h * 0.35], [c - n, h]],
+    [[c - n, h], [c - n, h + (hc - h) * 0.6], [c - r, hc - r * 0.45], [c - r, hc]],
+    [[c - r, hc], [c - r, hc + r * 0.55], [c - r * 0.55, hc + r], [c, hc + r]],
+    [[c, hc + r], [c + r * 0.55, hc + r], [c + r, hc + r * 0.55], [c + r, hc]],
+    [[c + r, hc], [c + r, hc - r * 0.45], [c + n, h + (hc - h) * 0.6], [c + n, h]],
+    [[c + n, h], [c + n, h * 0.35], [c + n + f * 0.3, 0], [b, 0]],
+    [[b, 0], [b + (1 - b) * 0.3, -waveB * 0.6], [b + (1 - b) * 0.65, waveB], [1, 0]],
   ]
-  const ctrls = [
-    null,
-    [[c - n - f * 0.3, 0], [c - n, h * 0.35]],
-    [[c - n, h + (hc - h) * 0.6], [c - r, hc - r * 0.45]],
-    [[c - r, hc + r * 0.55], [c - r * 0.55, hc + r]],
-    [[c + r * 0.55, hc + r], [c + r, hc + r * 0.55]],
-    [[c + r, hc - r * 0.45], [c + n, h + (hc - h) * 0.6]],
-    [[c + n, h * 0.35], [c + n + f * 0.3, 0]],
-    null,
-  ]
-  return { anchors, ctrls }
 }
 
-function edgePath(side, isTab, styleIndex, width, height, flat = false) {
+function edgePath(side, isTab, edge, width, height, flat = false) {
   if (flat) {
     if (side === 'top') return `L ${width} 0`
     if (side === 'right') return `L ${width} ${height}`
@@ -86,25 +81,26 @@ function edgePath(side, isTab, styleIndex, width, height, flat = false) {
   const length = vertical ? height : width
   const normal = { top: [0, -1], right: [1, 0], bottom: [0, 1], left: [-1, 0] }[side]
   const sign = isTab ? 1 : -1
-    const { anchors, ctrls } = knobProfile(SHAPE)
 
+  // u is always the world position along the edge, so neighbours line up exactly
   const toXY = ([u, v]) => {
-    const along = (reverse ? 1 - u : u) * length
+    const along = u * length
     const out = v * length * sign
     const x = vertical ? (side === 'right' ? width : 0) + normal[0] * out : along + normal[0] * out
     const y = vertical ? along + normal[1] * out : (side === 'bottom' ? height : 0) + normal[1] * out
     return [round2(x), round2(y)]
   }
 
-  const points = anchors.map(toXY)
-  const curves = ctrls.map((pair) => pair && [toXY(pair[0]), toXY(pair[1])])
-  const segment = (pair, to) => (pair
-    ? `C ${pair[0][0]} ${pair[0][1]}, ${pair[1][0]} ${pair[1][1]}, ${to[0]} ${to[1]}`
-    : `L ${to[0]} ${to[1]}`)
+  let segments = knobSegments(edge)
+  // bottom and left edges are walked backwards, so flip the segment order
+  if (reverse) segments = [...segments].reverse().map(([p0, c1, c2, p1]) => [p1, c2, c1, p0])
 
-    const commands = []
-  for (let i = 0; i < curves.length; i += 1) commands.push(segment(curves[i], points[i + 1]))
-  return commands.join(' ')
+  return segments.map(([, c1, c2, p1]) => {
+    const [x1, y1] = toXY(c1)
+    const [x2, y2] = toXY(c2)
+    const [x, y] = toXY(p1)
+    return `C ${x1} ${y1}, ${x2} ${y2}, ${x} ${y}`
+  }).join(' ')
 }
 
 export function getPiecePath(piece, grid) {
@@ -124,13 +120,13 @@ export function getPiecePath(piece, grid) {
   
 
   return [
-    'M 0 0',
-    edgePath('top', topTab, top?.style ?? 0, width, height, top === null),
-    edgePath('right', rightTab, right?.style ?? 0, width, height, right === null),
-    edgePath('bottom', bottomTab, bottom?.style ?? 0, width, height, bottom === null),
-    edgePath('left', leftTab, left?.style ?? 0, width, height, left === null),
-    'Z',
-  ].join(' ')
+  'M 0 0',
+  edgePath('top', topTab, top, width, height, top === null),
+  edgePath('right', rightTab, right, width, height, right === null),
+  edgePath('bottom', bottomTab, bottom, width, height, bottom === null),
+  edgePath('left', leftTab, left, width, height, left === null),
+  'Z',
+].join(' ')
 }
 
 // Free spots in a ring around the board where loose pieces can start

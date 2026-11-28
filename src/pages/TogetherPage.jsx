@@ -64,6 +64,30 @@ export default function TogetherPage({
   const status = room.game.status
   const levelFor = (id) => levels.find((item) => String(item.id) === String(id))
 
+  const withLiveLevel = (record) => {
+  const live = levelFor(record.levelId)
+  if (!live) return record
+  return {
+    ...record,
+    levelTitle: live.title,
+    levelOrder: live.order,
+    difficulty: live.difficulty,
+    pieceCount: live.pieceCount,
+    description: live.description,
+    imageURL: live.imageURL,
+    imageRotation: live.imageRotation,
+    imageAlt: live.imageAlt,
+  }
+}
+const displayHistory = Object.values(
+  history.map(withLiveLevel).reduce((best, record) => {
+    const current = best[record.levelId]
+    if (!current || record.totalTime < current.totalTime) best[record.levelId] = record
+    return best
+  }, {}),
+).sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))
+
+
   async function submitJoin(event) {
     event.preventDefault()
     setJoinError('')
@@ -283,11 +307,11 @@ useEffect(() => {
       </section>
 
       <section className="together-saves" aria-labelledby="together-saves-title">
-        <div className="section-title-row"><div><p className="section-eyebrow">YOUR SHARED SAVES</p><h2 id="together-saves-title">Finished together</h2></div><span className="together-count"><Heart size={14} /> {history.length}</span></div>
+        <div className="section-title-row"><div><p className="section-eyebrow">YOUR SHARED SAVES</p><h2 id="together-saves-title">Finished together</h2></div><span className="together-count"><Heart size={14} /> {displayHistory.length}</span></div>
         {historyState === 'loading' ? <><p className="puzzles-loading-status" role="status">Shared puzzle saves are loading.</p><div className="together-grid together-loading-grid" aria-hidden="true">{[1, 2, 3].map((item) => <div className="together-loading-save" key={item}><span className="data-skeleton together-loading-save-photo" /><span className="together-loading-save-copy"><i className="data-skeleton" /><i className="data-skeleton" /><i className="data-skeleton" /></span></div>)}</div></>
           : historyState === 'error' ? <p className="together-empty">Could not load your saves right now.</p>
-            : history.length === 0 ? <p className="together-empty">Your first finished puzzle will be kept here, with its level and who placed what.</p>
-              : <div className="together-grid">{history.map((record) => (
+            : displayHistory.length === 0 ? <p className="together-empty">Your first finished puzzle will be kept here, with its level and who placed what.</p>
+             : <div className="together-grid">{displayHistory.map((record) => (
                 <button type="button" key={record.id} className="recent-card" onClick={() => setSelected(record)}>
                   <Thumb src={record.imageURL} rotation={record.imageRotation} />
                   <span className="recent-info">

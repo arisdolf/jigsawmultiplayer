@@ -80,7 +80,6 @@
 [data-theme="dark"] .library-empty,
 [data-theme="dark"] .home-library-error,
 [data-theme="dark"] .levels-note,
-[data-theme="dark"] .profile-stat-row,
 [data-theme="dark"] .profile-completion-list li,
 [data-theme="dark"] .together-loading-save,
 [data-theme="dark"] .loading-game-stats,
@@ -267,7 +266,6 @@
 [data-theme="dark"] .join-key-icon,
 [data-theme="dark"] .recent-badge,
 [data-theme="dark"] .profile-studio-button,
-[data-theme="dark"] .profile-achievements span,
 [data-theme="dark"] .difficulty-pill,
 [data-theme="dark"] .level-image-status,
 [data-theme="dark"] .level-open-icon,
@@ -495,7 +493,8 @@
 [data-theme="dark"] .app-shell :is(
   .together-table.is-ready,
   .profile-page .profile-card,
-  .profile-page .profile-stat-row,
+  .profile-page .profile-stat-card,
+  .profile-page .profile-achievement-card,
   .admin-page .admin-toolbar,
   .admin-page .admin-level-list,
   .admin-page .admin-editor,
@@ -554,4 +553,32 @@ html.theme-transitioning *::after {
     box-shadow 460ms cubic-bezier(.2, .72, .25, 1),
     fill 460ms cubic-bezier(.2, .72, .25, 1),
     stroke 460ms cubic-bezier(.2, .72, .25, 1) !important;
+}
+
+[data-theme="dark"] .profile-page .profile-stat-card,
+[data-theme="dark"] .profile-page .profile-achievement-card {
+  border-color: rgba(184,205,219,.16);
+  color: var(--text-primary);
+  background: rgba(35,55,70,.7);
+  box-shadow: 0 8px 20px rgba(0,0,0,.12), inset 0 1px 0 rgba(230,242,249,.07);
+}
+[data-theme="dark"] .profile-page .profile-achievement-card.is-earned {
+  border-color: rgba(208,173,119,.27);
+  background: linear-gradient(135deg, rgba(113,91,58,.32), rgba(35,55,70,.72));
+}
+[data-theme="dark"] .profile-page .profile-stat-icon,
+[data-theme="dark"] .profile-page .profile-achievement-icon {
+  border-color: rgba(184,205,219,.15);
+  color: var(--text-secondary);
+  background: rgba(19,36,48,.62);
+}
+[data-theme="dark"] .profile-page .profile-stat-card strong,
+[data-theme="dark"] .profile-page .profile-achievement-copy strong {
+  color: var(--text-primary);
+}
+[data-theme="dark"] .profile-page .profile-stat-card small,
+[data-theme="dark"] .profile-page .profile-achievement-copy small,
+[data-theme="dark"] .profile-page .profile-achievement-status,
+[data-theme="dark"] .profile-page .profile-achievements-heading > span {
+  color: var(--text-secondary);
 }

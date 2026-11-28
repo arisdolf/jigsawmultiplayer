@@ -413,7 +413,7 @@
 }
 .home-lower-grid {
   display: grid;
-  grid-template-columns: 1.32fr .8fr;
+  grid-template-columns: 1fr;
   gap: 21px;
   padding: 32px 0 45px;
 }

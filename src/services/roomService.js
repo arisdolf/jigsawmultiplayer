@@ -14,6 +14,7 @@ import {
 } from 'firebase/database'
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore'
 import { callFirebaseFunction, database, firebaseReady, firestore } from './firebase'
+import { getCompletionAchievements } from '../utils/progress'
 import {
   canPlayMultiplayer,
   isSharedRoomId as detectSharedRoomId,
@@ -1000,13 +1001,15 @@ export async function recordCompletion({ shared = false, roomId, sessionId, leve
       const existing = previous.docs.find((entry) => entry.id === docId)
       if (existing) return { saved: true, achievements: existing.data().achievements || [] } // already saved
 
-      const earned = new Set(previous.docs.flatMap((entry) => entry.data().achievements || []))
-      const candidates = []
-      if (previous.empty) candidates.push('first-table')
-      if (players.length >= 8) candidates.push('full-table')
-      if (placedCount === 5000) candidates.push('master-table')
-      if ((contributionCounts[uid] || 0) >= 100) candidates.push('steady-hands')
-      const achievements = candidates.filter((id) => !earned.has(id))
+      const achievements = getCompletionAchievements({
+        previousCompletions: previous.docs.map((entry) => entry.data()),
+        players,
+        placedCount,
+        totalTime,
+        contributionCounts,
+        uid,
+        levelId,
+      })
 
       await setDoc(doc(firestore, 'users', uid, 'completions', docId), {
         ...completion,
@@ -1023,13 +1026,7 @@ export async function recordCompletion({ shared = false, roomId, sessionId, leve
 
   const saved = JSON.parse(localStorage.getItem('jigsawmult-demo-completions') || '[]')
   const previousForUser = saved.filter((record) => record.participants.includes(uid))
-  const alreadyEarned = new Set(previousForUser.flatMap((record) => record.achievements || []))
-  const candidates = []
-  if (!previousForUser.length) candidates.push('first-table')
-  if (players.length >= 8) candidates.push('full-table')
-  if (placedCount === 5000) candidates.push('master-table')
-  if ((contributionCounts[uid] || 0) >= 100) candidates.push('steady-hands')
-  const achievements = candidates.filter((id) => !alreadyEarned.has(id))
+  const achievements = getCompletionAchievements({ previousCompletions: previousForUser, players, placedCount, totalTime, contributionCounts, uid, levelId })
   completion.achievements = achievements
   saved.push({ id: crypto.randomUUID(), ...completion })
   localStorage.setItem('jigsawmult-demo-completions', JSON.stringify(saved.slice(-200)))

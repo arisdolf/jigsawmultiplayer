@@ -13,6 +13,12 @@ const achievementNames = {
   'full-table': 'Full House',
   'master-table': 'Master Table',
   'steady-hands': 'Steady Hands',
+  regular: 'Table Regular',
+  'scene-collector': 'Scene Collector',
+  'piece-collector': 'Piece Collector',
+  'solo-solver': 'Solo Solver',
+  'team-player': 'Good Company',
+  'quick-fit': 'Quick Fit',
 }
 
 function clockTime(totalSeconds) {
@@ -48,6 +54,7 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onR
   const [earnedAchievements, setEarnedAchievements] = useState([])
   const [completionAttempt, setCompletionAttempt] = useState(0)
   const [completionError, setCompletionError] = useState('')
+  const [completionOrientation, setCompletionOrientation] = useState('landscape')
 
   const [actualPieces, setActualPieces] = useState(0)
   const totalPieces = actualPieces || Number(level?.pieceCount || 0)
@@ -199,6 +206,9 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onR
   useEffect(() => {
     if (!isComplete) { setSkipCelebration(false); setCelebrationDone(false) }
   }, [isComplete])
+  useEffect(() => {
+    setCompletionOrientation('landscape')
+  }, [level?.imageRotation, level?.imageURL])
   const celebrate = isComplete && !skipCelebration
   const showCompletion = isComplete && (skipCelebration || celebrationDone)
   useEffect(() => {
@@ -261,6 +271,10 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onR
     try { window.screen.orientation?.unlock?.() } catch { /* ignore */ }
     if (document.fullscreenElement) document.exitFullscreen().catch(() => { })
   }
+
+  useEffect(() => {
+    if (showCompletion && fullscreen) exitFullscreen()
+  }, [showCompletion, fullscreen])
 
   // user leaves native full screen with the system gesture / back button
   useEffect(() => {
@@ -345,21 +359,29 @@ export default function GamePage({ roomControl, level, user, audio, onLeave, onR
     ...activity,
     player: room.players.find((player) => player.uid === activity.uid),
   }))
-  
+
   const imageTurn = ((Number(level?.imageRotation) || 0) % 360 + 360) % 360
-const imageQuarterTurn = imageTurn % 180 !== 0
-const referenceImageStyle = {
-  position: 'absolute',
-  top: '50%',
-  left: '50%',
-  width: imageQuarterTurn ? '100cqh' : '100%',
-  height: imageQuarterTurn ? '100cqw' : '100%',
-  objectFit: 'contain',
-  transform: `translate(-50%, -50%) rotate(${imageTurn}deg)`,
-  pointerEvents: 'none',
-  imageTurn,
-  imageQuarterTurn
-}
+  const imageQuarterTurn = imageTurn % 180 !== 0
+  const referenceImageStyle = {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: imageQuarterTurn ? '100cqh' : '100%',
+    height: imageQuarterTurn ? '100cqw' : '100%',
+    objectFit: 'contain',
+    transform: `translate(-50%, -50%) rotate(${imageTurn}deg)`,
+    pointerEvents: 'none',
+    imageTurn,
+    imageQuarterTurn
+  }
+  function updateCompletionOrientation(event) {
+    const image = event.currentTarget
+    if (!image.naturalWidth || !image.naturalHeight) return
+    const isPortrait = imageQuarterTurn
+      ? image.naturalWidth > image.naturalHeight
+      : image.naturalHeight > image.naturalWidth
+    setCompletionOrientation(isPortrait ? 'portrait' : 'landscape')
+  }
 
   return (
     <main className={`game-page ${fullscreen ? 'is-fullscreen' : ''}`} ref={pageRef}>
@@ -441,23 +463,59 @@ const referenceImageStyle = {
         </aside>
       </div>
 
-      {showCompletion && <div className="completion-screen" role="dialog" aria-modal="true" aria-labelledby="completion-title">
-        <div className="completion-confetti" aria-hidden="true"><Sparkles /><Sparkles /><Sparkles /></div>
-        <button type="button" className="completion-close" onClick={onReturnFromGame} aria-label={shared ? 'Return to our table' : 'Return to puzzle shelf'}><X size={18} /></button>
-        <div className={`completion-photo ${imageQuarterTurn ? 'is-quarter-turn' : ''}`}>  <img className={imageQuarterTurn ? 'is-quarter-turn' : undefined} src={level?.imageURL} alt={level?.imageAlt || ''} style={{ '--level-image-rotation': `${imageTurn}deg` }} /><span><Check size={16} /> Puzzle complete</span></div>
-        <div className="completion-copy"><p className="section-eyebrow">A TABLE FULL OF GOOD WORK</p><h2 id="completion-title">Look what you made <em>together.</em></h2><p>Every piece found its place. Thanks for taking your time with each other.</p></div>
-        <div className="completion-stats"><div><Clock3 size={15} /><span><small>Time together</small><strong>{clockTime(elapsed)}</strong></span></div><div><UsersRound size={15} /><span><small>Puzzle pals</small><strong>{contributors.length}</strong></span></div><div><Trophy size={15} /><span><small>Level finished</small><strong>{level?.order} of 10</strong></span></div></div>
-        <div className="completion-contributors"><div className="completion-contributors-heading"><Sparkles size={15} /><strong>Everybody brought something</strong></div><div className="contributor-list">{contributors.map((player) => <div key={player.uid}><Avatar player={player} size="sm" /><span>{player.displayName}</span><strong>{player.piecesPlaced.toLocaleString()} pieces</strong></div>)}</div></div>
-        {earnedAchievements.length > 0 && <div className="earned-achievement"><Trophy size={16} /><span><small>Achievement earned</small><strong>{earnedAchievements.map((id) => achievementNames[id] || id).join(' · ')}</strong></span></div>}
-        {savingCompletion && <p className="completion-saving" role="status">Saving this little win…</p>}
-        {completionError && <div><p className="form-error" role="alert">{completionError}</p>{<button type="button" className="text-action" disabled={savingCompletion} onClick={() => { completionHandled.current = ''; setCompletionAttempt((value) => value + 1) }}>Try saving again</button>}</div>}
-        <div className="completion-actions">
-          <button type="button" className="button button-primary" onClick={onNextLevel} disabled={!host || !onNextLevel}><Sparkles size={16} /> Next level</button>
-          <button type="button" className="button button-outline" onClick={restartPuzzle} disabled={!host} title={host ? undefined : 'Only the host can restart'}><RotateCw size={16} /> Play again</button>
-          <button type="button" className="button button-outline" onClick={onReturnFromGame}>{shared ? 'Back to our table' : 'Back to puzzle shelf'}</button>
-        </div>
-      </div>}
+      {showCompletion && !fullscreen && (
+        <div className="done-screen" role="dialog" aria-modal="true" aria-labelledby="completion-title">
+          <div className="done-card">
+            <button type="button" className="done-close" onClick={onReturnFromGame} aria-label={shared ? 'Return to our table' : 'Return to puzzle shelf'}><X size={18} /></button>
 
+            <div className={'done-photo is-' + completionOrientation + (imageQuarterTurn ? ' is-quarter-turn' : '')}>
+              <img key={`${level?.imageURL || ''}:${level?.imageRotation || 0}`} src={level?.imageURL} alt={level?.imageAlt || ''} onLoad={updateCompletionOrientation} style={referenceImageStyle} />
+              <span className="done-photo-badge"><Check size={16} /> Puzzle complete</span>
+            </div>
+
+            <div className="done-content">
+              <p className="section-eyebrow">A TABLE FULL OF GOOD WORK</p>
+              <h2 id="completion-title">Look what you made <em>together.</em></h2>
+              <p className="done-description">Every piece found its place. Thanks for taking your time with each other.</p>
+
+              <div className="done-stats">
+                <div><Clock3 size={15} /><span><small>Time together</small><strong>{clockTime(elapsed)}</strong></span></div>
+                <div><UsersRound size={15} /><span><small>Puzzle pals</small><strong>{contributors.length}</strong></span></div>
+                <div><Trophy size={15} /><span><small>Level finished</small><strong>{level?.order} of 10</strong></span></div>
+              </div>
+
+              <div className="done-contributors">
+                <div className="done-contributors-heading"><Sparkles size={15} /><strong>Everybody brought something</strong></div>
+                <ul className="done-contributor-list">
+                  {contributors.map((player) => (
+                    <li key={player.uid}><Avatar player={player} size="sm" /><span>{player.displayName}</span><strong>{player.piecesPlaced.toLocaleString()} pieces</strong></li>
+                  ))}
+                </ul>
+              </div>
+
+              {earnedAchievements.length > 0 && (
+                <div className="done-achievement"><Trophy size={16} /><span><small>Achievement earned</small><strong>{earnedAchievements.map((id) => achievementNames[id] || id).join(' · ')}</strong></span></div>
+              )}
+
+              {savingCompletion && <p className="completion-saving" role="status">Saving this little win…</p>}
+              {completionError && (
+                <div>
+                  <p className="form-error" role="alert">{completionError}</p>
+                  <button type="button" className="text-action" disabled={savingCompletion} onClick={() => { completionHandled.current = ''; setCompletionAttempt((v) => v + 1) }}>Try saving again</button>
+                </div>
+              )}
+
+              <div className="done-actions">
+                <button type="button" className="button button-primary" onClick={onNextLevel} disabled={!host || !onNextLevel}><Sparkles size={16} /> Next level</button>
+                <div className="done-actions-row">
+                  <button type="button" className="button button-outline" onClick={restartPuzzle} disabled={!host} title={host ? undefined : 'Only the host can restart'}><RotateCw size={16} /> Play again</button>
+                  <button type="button" className="button button-outline" onClick={onReturnFromGame}>{shared ? 'Back to our table' : 'Back to puzzle shelf'}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <Modal open={confirmExit} onClose={() => setConfirmExit(false)} title="Step away from the table?" description="Your puzzle will stay here for everyone else." className="confirm-modal">
         <div className="confirm-actions"><button type="button" className="button button-quiet" onClick={() => setConfirmExit(false)}>Stay here</button><button type="button" className="button button-primary" onClick={onLeave}><ArrowLeft size={16} /> Leave room</button></div>
       </Modal>

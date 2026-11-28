@@ -273,12 +273,6 @@ const completedIds = useMemo(() => new Set(soloCompletions.map((item) => item.le
     () => recentIds.map((id) => levels.find((level) => level.id === id)).filter(Boolean),
     [recentIds, levels],
   )
-  const stats = useMemo(() => ({
-   completed: new Set(soloCompletions.map((item) => item.levelId)).size,
-    rooms: visits,
-    pieces: completions.reduce((total, item) => total + Number(item.piecesPlaced || 0), 0),
-  }), [completions, visits, soloCompletions])
-
   const ensureUser = useCallback(async () => {
     if (auth.user) return auth.user
     return auth.guest('Puzzle Pal')
@@ -576,14 +570,6 @@ const completedIds = useMemo(() => new Set(soloCompletions.map((item) => item.le
     }
   }, [levels, ensureUser, roomControl.create, openRoom, tell])
 
-  const createInviteRoom = useCallback(() => {
-    if (!canTogether) {
-      requestAccount('Sign in with an account to make a multiplayer room. Guests can still play solo.')
-      return
-    }
-    void createRoom()
-  }, [canTogether, createRoom, requestAccount])
-
   const resumeRoom = useCallback(async (level) => {
     const user = auth.user
     const code = user ? readActiveRoom(user.uid, level.id) : null
@@ -660,7 +646,7 @@ const completedIds = useMemo(() => new Set(soloCompletions.map((item) => item.le
     await refreshLevels()
   }
   const libraryLoading = levelsLoading || (Boolean(auth.user) && completionsLoading)
-  const homePage = <HomePage levels={levels} loading={libraryLoading} statsLoading={Boolean(auth.user) && completionsLoading} error={levelsError} user={auth.user} authLoading={auth.loading} stats={stats} recentLevels={recentLevels} recentLevelCount={recentIds.length} onPlay={playLevel} onCreateRoom={createInviteRoom} onTogether={() => navigate('together')} onBrowse={() => setScreen('levels')} onRetry={refreshLevels} />
+  const homePage = <HomePage levels={levels} loading={libraryLoading} error={levelsError} authLoading={auth.loading} recentLevels={recentLevels} recentLevelCount={recentIds.length} onPlay={playLevel} onTogether={() => navigate('together')} onBrowse={() => setScreen('levels')} onRetry={refreshLevels} />
   const levelsPage = <LevelsPage  levels={levels} loading={libraryLoading} error={levelsError} completions={soloCompletions} onPlay={playLevel} onRetry={refreshLevels} onBack={() => setScreen('home')} interactionDisabled={auth.loading} />
   let page
   if (auth.loading) {
@@ -692,7 +678,7 @@ const completedIds = useMemo(() => new Set(soloCompletions.map((item) => item.le
   } else if (screen === 'admin') {
     page = <AdminPage levels={levelRecords} loading={levelsLoading} isAdmin={auth.isAdmin} firebaseReady={auth.firebaseReady} onSave={saveAdminLevel} onReload={refreshLevels} />
   } else if (screen === 'profile' && auth.user) {
-    page = <ProfilePage onSignOut={handleSignOut} user={auth.user} completions={completions} completionsLoading={completionsLoading} levels={levels} onBack={() => setScreen('home')} onRename={auth.rename} isAdmin={auth.isAdmin} onAdmin={() => setScreen('admin')} />
+    page = <ProfilePage onSignOut={handleSignOut} user={auth.user} completions={completions} completionsLoading={completionsLoading} roomsVisited={visits} levels={levels} onBack={() => setScreen('home')} onRename={auth.rename} isAdmin={auth.isAdmin} onAdmin={() => setScreen('admin')} />
   } else {
     page = homePage
   }

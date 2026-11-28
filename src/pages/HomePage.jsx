@@ -1,4 +1,4 @@
-﻿import { ArrowRight, ArrowUpRight, Check, Clock3, Compass, Heart, LockKeyhole, MoveRight, Puzzle, Sparkles, UsersRound } from 'lucide-react'
+﻿import { ArrowRight, ArrowUpRight, Check, Compass, Heart, MoveRight, Puzzle, Sparkles, UsersRound } from 'lucide-react'
 import { useState } from 'react'
 import LevelCard, { LevelCardSkeleton } from '../components/LevelCard'
 import '../css/pages/HomePage.css'
@@ -8,14 +8,10 @@ export default function HomePage({
   levels,
   loading,
   error,
-  user,
-  stats,
-  statsLoading = false,
   recentLevels = [],
   recentLevelCount = recentLevels.length,
   authLoading = false,
   onPlay,
-  onCreateRoom,
   onTogether,
   onBrowse,
   onRetry,
@@ -45,9 +41,6 @@ export default function HomePage({
           <div className="hero-actions">
             <button className="button button-primary button-large" type="button" onClick={() => featured && onPlay(featured)} disabled={!featured || loading || authLoading}>
               <Puzzle size={19} /> {recentLevel ? 'Continue' : 'Play now'} <ArrowRight size={18} />
-            </button>
-            <button className="button button-outline button-large" type="button" onClick={onCreateRoom} disabled={loading || authLoading}>
-              <UsersRound size={18} /> Make a room
             </button>
           </div>
           <button type="button" className="browse-link" onClick={onBrowse}>Browse all 10 puzzles <MoveRight size={15} /></button>
@@ -87,7 +80,7 @@ export default function HomePage({
       </section>
 
       <section className="join-strip" aria-label="Shared table">
-        <div className="join-strip-copy"><span className="join-key-icon"><UsersRound size={17} /></span><div><strong>Our table is always set</strong><span>A shared puzzle that saves and syncs for you both.</span></div></div>
+        <div className="join-strip-copy"><span className="join-key-icon"><UsersRound size={20} /></span><div><strong>Our table is always set</strong><span>A shared puzzle that saves and syncs for you both.</span></div></div>
         <button type="button" className="button button-dark" onClick={onTogether}>Open our table <ArrowRight size={16} /></button>
       </section>
 
@@ -164,41 +157,8 @@ export default function HomePage({
             <div className="step"><span className="step-mark step-beige"><Check size={19} /></span><div><strong>Find the fit</strong><p>Every piece lands on the same shared board.</p></div></div>
           </div>
         </div>
-        <aside className="your-table">
-          <div className="your-table-heading">
-            <span className="table-stamp"><Heart size={16} /></span>
-            <div>
-              <p className="section-eyebrow">YOUR LITTLE CORNER</p>
-              <h3>{authLoading ? <span className="data-skeleton home-greeting-placeholder" aria-hidden="true" /> : user?.displayName ? `Hi, ${user.displayName.split(' ')[0]}.` : 'Your table is ready.'}</h3>
-            </div>
-          </div>
-          {recentLevel ? (
-            <button className="recent-puzzle-row" type="button" onClick={() => onPlay(recentLevel)}>
-              <img
-                src={recentLevel.imageURL}
-                alt=""
-                style={{ transform: `rotate(${((Number(recentLevel.imageRotation) || 0) % 360 + 360) % 360}deg)` }}
-              />
-              <span><strong>Pick up where you left off</strong><small>{recentLevel.title} · {recentLevel.pieceCount.toLocaleString()} pieces</small></span>
-              <ArrowUpRight size={17} />
-            </button>
-          ) : loading && recentLevelCount > 0 ? (
-            <div className="recent-puzzle-row recent-puzzle-loading" aria-hidden="true">
-              <span className="data-skeleton recent-puzzle-image-placeholder" />
-              <span className="recent-puzzle-copy-placeholder"><i className="data-skeleton" /><i className="data-skeleton" /></span>
-              <span className="data-skeleton recent-puzzle-arrow-placeholder" />
-            </div>
-          ) : (
-            <div className="table-empty"><p>Your recent puzzles and room notes will gather here.</p><button type="button" className="text-action" onClick={onBrowse}>Choose your first <ArrowRight size={15} /></button></div>
-          )}
-          <div className="your-stats" aria-busy={authLoading || statsLoading}>
-            <div><strong>{authLoading || statsLoading ? <span className="data-skeleton home-stat-placeholder" aria-hidden="true" /> : stats.completed}</strong><span>finished</span></div>
-            <div><strong>{authLoading || statsLoading ? <span className="data-skeleton home-stat-placeholder" aria-hidden="true" /> : stats.rooms}</strong><span>rooms joined</span></div>
-            <div><strong>{authLoading || statsLoading ? <span className="data-skeleton home-stat-placeholder" aria-hidden="true" /> : stats.pieces.toLocaleString()}</strong><span>pieces placed</span></div>
-          </div>
-        </aside>
       </section>
-      <footer className="page-footer"><span>JigsawMult</span><span>Take your time. Find your people. <Heart size={13} fill="currentColor" /></span><button type="button" onClick={onCreateRoom} disabled={loading || authLoading}>Make a room <ArrowUpRight size={14} /></button></footer>
+      <footer className="page-footer"><span>JigsawMult</span><span>Take your time. Find your people. <Heart size={13} fill="currentColor" /></span></footer>
     </main>
   )
 }

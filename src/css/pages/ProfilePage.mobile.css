@@ -31,7 +31,19 @@
     padding-inline: 9px;
     font-size: 10px;
   }
-  .profile-stat-row {
-    grid-template-columns: 1fr auto;
+  .profile-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 540px) {
+  .profile-stat-grid,
+  .profile-loading-stat-skeleton {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .profile-achievements-grid {
+    grid-template-columns: 1fr;
+  }
+  .profile-loading-stat-skeleton .data-skeleton {
+    height: 101px;
   }
 }
