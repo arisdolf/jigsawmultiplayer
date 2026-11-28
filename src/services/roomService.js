@@ -1004,7 +1004,7 @@ export async function getUserCompletions(uid) {
 }
 
 
-export async function movePieces(roomId, items, user) {
+export async function movePieces(roomId, items, user, { keepAlive = false } = {}) {
   const now = Date.now()
   if (!firebaseReady) {
     const room = loadLocalRooms().get(roomId)
@@ -1017,15 +1017,16 @@ export async function movePieces(roomId, items, user) {
     })
     return
   }
-  const patch = {}
+    const patch = {}
   items.forEach(({ id, x, y, rotation }) => {
     const base = `rooms/${roomId}/pieces/${id}`
-    patch[`${base}/x`] = x
-    patch[`${base}/y`] = y
-        patch[`${base}/rotation`] = Number(rotation) || 0
-    patch[`${base}/movingBy`] = user.uid
-    patch[`${base}/lockUntil`] = now + 12000
-    patch[`${base}/updatedAt`] = now
+    patch[`${base}/x`] = Math.round(x)
+    patch[`${base}/y`] = Math.round(y)
+    patch[`${base}/rotation`] = Number(rotation) || 0
+    if (keepAlive) {
+      patch[`${base}/movingBy`] = user.uid
+      patch[`${base}/lockUntil`] = now + 12000
+    }
   })
   await update(ref(database), patch)
 }

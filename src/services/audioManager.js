@@ -210,52 +210,33 @@ let combo = 0
 let lastCorrectAt = -100
 
 const effects = {
-  // pick a piece up: soft wooden lift
-  pickup(bus, t) {
-    tone(bus, { freq: 420, glideTo: 560, type: 'triangle', start: t, dur: 0.07, gain: 0.09 })
-    noise(bus, { start: t, dur: 0.03, gain: 0.05, freq: 2200, q: 1.2 })
-  },
-  // set a piece down on the table
-  drop(bus, t) {
-    tone(bus, { freq: 230, glideTo: 140, start: t, dur: 0.11, gain: 0.12 })
-    noise(bus, { start: t, dur: 0.05, gain: 0.06, type: 'lowpass', freq: 1100 })
-  },
-  // dragging: a very quiet paper slide
-  move(bus, t) {
-    noise(bus, { start: t, dur: 0.05, gain: 0.03, freq: rand(1800, 2800), q: 0.8 })
-  },
-  // rotate: tok-tik
-  rotate(bus, t) {
-    tone(bus, { freq: 520, type: 'triangle', start: t, dur: 0.05, gain: 0.07 })
-    tone(bus, { freq: 780, type: 'triangle', start: t + 0.055, dur: 0.08, gain: 0.07 })
-    noise(bus, { start: t, dur: 0.02, gain: 0.03, freq: 3000, q: 1.5 })
-  },
-  // piece clicks into its spot: wooden thump plus a happy chime (pitch varies so it stays musical)
-  correct(bus, t) {
-    // streak: each quick placement is a step higher on the scale
-    combo = audioContext.currentTime - lastCorrectAt < COMBO_WINDOW ? Math.min(combo + 1, COMBO_STEPS.length - 1) : 0
-    lastCorrectAt = audioContext.currentTime
-    const freq = mtof(72) * Math.pow(2, COMBO_STEPS[combo] / 12)
-    const heat = combo / (COMBO_STEPS.length - 1) // 0 on the first piece, 1 on a max streak
-
-    // 1. snap: a sharp click as the piece locks in
-    noise(bus, { start: t, dur: 0.015, gain: 0.12, type: 'highpass', freq: 3500, attack: 0.001 })
-    noise(bus, { start: t, dur: 0.04, gain: 0.07, freq: 1800, q: 2, attack: 0.001 })
-    // 2. punch: a weighty thump that gets a little bigger with the streak
-    tone(bus, { freq: 240, glideTo: 70, start: t, dur: 0.13, gain: 0.15 + heat * 0.05, attack: 0.002 })
-    tone(bus, { freq: 480, glideTo: 280, type: 'triangle', start: t, dur: 0.05, gain: 0.07, attack: 0.002 })
-    // 3. woody "tok" that climbs in pitch with the streak
-    tone(bus, { freq: freq * 0.5, glideTo: freq * 0.3, type: 'triangle', start: t, dur: 0.08, gain: 0.1, attack: 0.002 })
-    // 4. a soft chime that grows sweeter and fuller as the streak builds
-    //    streak 0: one quiet chime | 2+: a major third joins | 4+: a fifth | 6+: an octave
-    //    5+: a gentle sparkle | 7+: a warm glow underneath
-    bell(bus, freq, t + 0.03, 0.035 + heat * 0.045, 0.5 + heat * 0.7)
-    if (combo >= 2) bell(bus, freq * 1.25, t + 0.07, 0.03 + heat * 0.035, 0.5 + heat * 0.7)
-    if (combo >= 4) bell(bus, freq * 1.5, t + 0.115, 0.03 + heat * 0.035, 0.6 + heat * 0.8)
-    if (combo >= 6) bell(bus, freq * 2, t + 0.16, 0.028 + heat * 0.03, 0.7 + heat * 0.9)
-    if (combo >= 5) noise(bus, { start: t + 0.1, dur: 0.2 + heat * 0.4, gain: 0.008 + heat * 0.018, type: 'highpass', freq: 7000, attack: 0.03 })
-    if (combo >= 7) tone(bus, { freq: freq * 0.5, start: t + 0.03, dur: 0.9, gain: heat * 0.045, attack: 0.04 })
-  },
+ pickup(bus, t) {
+  tone(bus, { freq: 380, glideTo: 640, start: t, dur: 0.09, gain: 0.08 })
+  tone(bus, { freq: 760, glideTo: 1280, start: t, dur: 0.06, gain: 0.025 })
+},
+drop(bus, t) {
+  tone(bus, { freq: 280, glideTo: 150, start: t, dur: 0.1, gain: 0.11 })
+  tone(bus, { freq: 560, type: 'triangle', start: t, dur: 0.04, gain: 0.04 })
+},
+move(bus, t) {
+  tone(bus, { freq: rand(900, 1100), start: t, dur: 0.025, gain: 0.012 })
+},
+rotate(bus, t) {
+  tone(bus, { freq: 660, start: t, dur: 0.1, gain: 0.07 })
+  tone(bus, { freq: 880, start: t + 0.06, dur: 0.12, gain: 0.07 })
+},
+correct(bus, t) {
+  combo = audioContext.currentTime - lastCorrectAt < COMBO_WINDOW ? Math.min(combo + 1, COMBO_STEPS.length - 1) : 0
+  lastCorrectAt = audioContext.currentTime
+  const freq = mtof(72) * Math.pow(2, COMBO_STEPS[combo] / 12)
+  const heat = combo / (COMBO_STEPS.length - 1)
+  tone(bus, { freq: 240, glideTo: 80, start: t, dur: 0.12, gain: 0.13 + heat * 0.05, attack: 0.002 })
+  tone(bus, { freq: freq * 0.5, glideTo: freq * 0.35, type: 'triangle', start: t, dur: 0.08, gain: 0.09, attack: 0.002 })
+  bell(bus, freq, t + 0.03, 0.04 + heat * 0.045, 0.5 + heat * 0.7)
+  if (combo >= 2) bell(bus, freq * 1.25, t + 0.07, 0.03 + heat * 0.035, 0.5 + heat * 0.7)
+  if (combo >= 4) bell(bus, freq * 1.5, t + 0.115, 0.03 + heat * 0.035, 0.6 + heat * 0.8)
+  if (combo >= 6) bell(bus, freq * 2, t + 0.16, 0.028 + heat * 0.03, 0.7 + heat * 0.9)
+},
   // two pieces join into a group: softer two-note pluck
   connect(bus, t) {
     const root = pick([392, 440, 493.88])
@@ -263,10 +244,9 @@ const effects = {
     keys(bus, root * 1.25, t + 0.06, 0.06, 0.8)
   },
   // wrong spot: a soft, friendly thud (never harsh)
-  incorrect(bus, t) {
-    tone(bus, { freq: 190, glideTo: 120, type: 'triangle', start: t, dur: 0.14, gain: 0.09 })
-    noise(bus, { start: t, dur: 0.06, gain: 0.04, type: 'lowpass', freq: 800 })
-  },
+incorrect(bus, t) {
+  tone(bus, { freq: 200, glideTo: 130, type: 'triangle', start: t, dur: 0.14, gain: 0.08 })
+},
   // puzzle finished: warm rising arpeggio with shimmer
   complete(bus, t) {
     ;[523.25, 659.25, 783.99, 987.77, 1046.5, 1318.5, 1568].forEach((freq, index) => {
@@ -288,8 +268,12 @@ const effects = {
     bell(bus, 1046.5, t + 0.09, 0.06, 1.2)
   },
   button(bus, t) {
-    tone(bus, { freq: 620, type: 'triangle', start: t, dur: 0.04, gain: 0.04 })
-  },
+  tone(bus, { freq: 620, type: 'triangle', start: t, dur: 0.05, gain: 0.04 })
+},
+tab(bus, t) {
+  tone(bus, { freq: 523.25, start: t, dur: 0.1, gain: 0.05 })
+  tone(bus, { freq: 783.99, start: t + 0.05, dur: 0.14, gain: 0.05 })
+},
 }
 
 export function playSound(name) {
@@ -364,13 +348,13 @@ function playBar(t, index) {
     }
   }
 
-  // very soft lo-fi drums
-  tone(bus, { freq: 120, glideTo: 45, start: t, dur: 0.25, gain: 0.16, attack: 0.004 })
-  if (Math.random() < 0.85) tone(bus, { freq: 120, glideTo: 45, start: t + BEAT * 2, dur: 0.25, gain: 0.13, attack: 0.004 })
-  ;[1, 3].forEach((beat) => {
-    noise(bus, { start: t + BEAT * beat, dur: 0.1, gain: 0.03, freq: 1600, q: 0.9 })
-    tone(bus, { freq: 330, type: 'triangle', start: t + BEAT * beat, dur: 0.06, gain: 0.02 })
-  })
+
+  // soft drums, no noise
+tone(bus, { freq: 120, glideTo: 45, start: t, dur: 0.25, gain: 0.16, attack: 0.004 })
+if (Math.random() < 0.85) tone(bus, { freq: 120, glideTo: 45, start: t + BEAT * 2, dur: 0.25, gain: 0.13, attack: 0.004 })
+;[1, 3].forEach((beat) => {
+  tone(bus, { freq: 330, type: 'triangle', start: t + BEAT * beat, dur: 0.08, gain: 0.025 })
+})
   for (let slot = 0; slot < 8; slot += 1) {
     if (Math.random() > 0.7) continue
     const swing = slot % 2 ? BEAT * 0.5 * 0.18 : 0
@@ -415,7 +399,7 @@ export function startMusic() {
   musicSend.connect(reverb)
   setGain(masterMusic, musicVolume * musicSceneFactor * MUSIC_TRIM, 1.6)
 
-  startCrackle()
+  
   nextBarTime = audio.currentTime + 0.15
   barIndex = 0
   scheduleMusic()

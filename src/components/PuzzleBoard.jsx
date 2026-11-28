@@ -322,7 +322,10 @@ export default function PuzzleBoard({
     const timer = window.setInterval(() => {
       const drag = dragRef.current
       if (drag?.kind === 'piece' && drag.locked) {
-        roomControl.moveMany(drag.members.map((member) => ({ id: member.piece.id, x: member.piece.x, y: member.piece.y, rotation: member.piece.rotation || 0 }))).catch(() => { })
+        roomControl.moveMany(
+          drag.members.map((member) => ({ id: member.piece.id, x: member.piece.x, y: member.piece.y, rotation: member.piece.rotation || 0 })),
+          { keepAlive: true },
+        ).catch(() => { })
       }
     }, 4000)
     return () => window.clearInterval(timer)
@@ -892,7 +895,9 @@ export default function PuzzleBoard({
     drawRef.current?.()
     if (!drag.locked) return
     const now = Date.now()
-    if (now - lastWriteRef.current.at > (IS_TOUCH ? 220 : 120) && !lastWriteRef.current.pending) {
+    const base = IS_TOUCH ? 220 : 120
+    const interval = base + Math.min(300, drag.members.length * 4)
+    if (now - lastWriteRef.current.at > interval && !lastWriteRef.current.pending) {
       lastWriteRef.current.at = now
       lastWriteRef.current.pending = roomControl.moveMany(drag.members.map((member) => ({ id: member.piece.id, x: member.piece.x, y: member.piece.y, rotation: member.piece.rotation || 0 })))
         .catch(() => { })
